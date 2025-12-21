@@ -17,30 +17,41 @@ fastify.get('/', async () => {
   return { status: 'Time Clash Server Online' };
 });
 
-// --- API: START GAME ---
-fastify.post('/start', async (request, reply) => {
+// --- API: INIT GAME (Pre-fetch Target & Token) ---
+fastify.post('/init-game', async (request, reply) => {
   const { userId } = request.body;
   if (!userId) return reply.code(400).send({ error: "UserId required" });
 
-  const startTime = Date.now();
-  // RANDOM TARGET: 1.000s to 9.999s
   const targetTime = Math.floor(Math.random() * 9000) + 1000; 
+  const sessionToken = `sess_${userId}_${Date.now()}_${Math.random().toString(36).substr(2)}`;
   
-  const sessionToken = `sess_${userId}_${startTime}_${Math.random().toString(36).substr(2)}`;
-  
-  // SAVE FULL SESSION IN REDIS (Safe from restarts)
-  // Expire in 120 seconds (2 mins)
-  // NOTE: Upstash Redis uses { ex: seconds } option
+  // Create session but don't start time yet
   await redis.set(`session:${sessionToken}`, JSON.stringify({ 
     userId, 
-    startTime, 
-    targetTime 
-  }), { ex: 120 });
+    startTime: 0, // Will be set later
+    targetTime,
+    status: 'ready'
+  }), { ex: 300 }); // 5 mins expiry
 
-  // Also lock user to prevent multiple games
-  await redis.set(`playing:${userId}`, "true", { ex: 60 }); 
+  return { sessionToken, targetTime };
+});
 
-  return { sessionToken, message: "Game Started", serverTime: startTime, targetTime };
+// --- API: START TIMER (Background Sync) ---
+fastify.post('/start-timer', async (request, reply) => {
+  const { sessionToken } = request.body;
+  
+  const sessionData = await redis.get(`session:${sessionToken}`);
+  if (!sessionData) return reply.code(403).send({ error: "Invalid Session" });
+  
+  let session = (typeof sessionData === 'string') ? JSON.parse(sessionData) : sessionData;
+  
+  // Set Server Start Time NOW
+  session.startTime = Date.now();
+  session.status = 'running';
+  
+  await redis.set(`session:${sessionToken}`, JSON.stringify(session), { ex: 120 });
+  
+  return { success: true, serverStartTime: session.startTime };
 });
 
 // --- API: STOP GAME (VERIFY & RANK) ---
