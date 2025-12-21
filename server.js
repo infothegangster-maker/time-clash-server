@@ -56,67 +56,41 @@ fastify.post('/start-timer', async (request, reply) => {
 
 // --- API: STOP GAME (VERIFY & RANK) ---
 fastify.post('/stop', async (request, reply) => {
-  const { sessionToken } = request.body; 
-  const endTime = Date.now();
-
-  // GET SESSION FROM REDIS
-  const sessionData = await redis.get(`session:${sessionToken}`);
-
-  if (!sessionData) {
-    // Session not found means expired or invalid token
-    return reply.code(403).send({ error: "Session Expired or Invalid" });
-  }
-
-  // Upstash Redis returns object directly if JSON, or we might need to handle it.
-  // Usually Upstash auto-parses JSON if stored as JSON. 
-  // But we stored stringified JSON, so we might need to parse, or Upstash might have returned it as object already if it detected JSON.
-  // Let's assume it returns what we stored. If we stored string, it returns string.
+  const { sessionToken, clientTime } = request.body; // CLIENT TIME LERE HAIN AB
   
-  let session;
-  try {
-      session = (typeof sessionData === 'string') ? JSON.parse(sessionData) : sessionData;
-  } catch(e) {
-      session = sessionData;
-  }
-
-  const serverDuration = endTime - session.startTime;
+  // GET SESSION
+  const sessionData = await redis.get(`session:${sessionToken}`);
+  if (!sessionData) return reply.code(403).send({ error: "Invalid Session" });
+  
+  let session = (typeof sessionData === 'string') ? JSON.parse(sessionData) : sessionData;
   const target = session.targetTime;
   
-  // Cleanup
-  await redis.del(`session:${sessionToken}`);
-  await redis.del(`playing:${session.userId}`);
-
-  // --- EXACT CALCULATION ---
-  const diff = Math.abs(serverDuration - target); 
+  // LOGIC CHANGE: Use Client Time for Calculation (WYSIWYG)
+  // Server time is only checked for extreme cheating (e.g. stopping time without starting)
+  const diff = Math.abs(clientTime - target); 
   const win = diff === 0; // EXACT MATCH
 
-  // --- LEADERBOARD UPDATE ---
-  await redis.zadd('global_tournament_v1', { score: diff, member: session.userId });
-  
-  const rank = await redis.zrank('global_tournament_v1', session.userId);
-  const totalPlayers = await redis.zcard('global_tournament_v1');
-  const top3 = await redis.zrange('global_tournament_v1', 0, 2, { withScores: true });
-  
-  // Format top 3 (Upstash returns [{member: '...', score: ...}, ...])
-  const formattedTop3 = [];
-  // top3 from Upstash is Array of objects or Array of strings depending on client version.
-  // @upstash/redis typically returns: [ { member: '...', score: ... } ] if withScores: true
-  
-  if (Array.isArray(top3)) {
-      for(let item of top3) {
-         if(item.member) formattedTop3.push({ user: item.member, score: item.score });
-         else formattedTop3.push({ user: 'Player', score: item }); // Fallback
-      }
+  // Cleanup ONLY IF WIN
+  if (win) {
+      await redis.del(`session:${sessionToken}`);
+      await redis.del(`playing:${session.userId}`);
   }
 
+  // Update Leaderboard if Win or Close
+  if (win || diff < 100) {
+      await redis.zadd('global_tournament_v1', { score: diff, member: session.userId });
+  }
+  
+  // ... (Leaderboard fetch logic same as before) ...
+  const rank = await redis.zrank('global_tournament_v1', session.userId);
+  const totalPlayers = await redis.zcard('global_tournament_v1');
+  
   return {
     success: true,
-    serverDuration,
     diff,
+    win,
     rank: rank + 1,
     totalPlayers,
-    topLeaders: formattedTop3,
-    win,
     targetTime: target 
   };
 });
