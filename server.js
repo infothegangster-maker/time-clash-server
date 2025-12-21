@@ -104,13 +104,14 @@ io.on('connection', (socket) => {
 
     // 3. STOP CLOUD TIMER
     socket.on('stop_timer', async () => {
-        const stopTime = Date.now();
-        
-        // KILL INTERVAL IMMEDIATELY (Stop Streaming)
+        // KILL INTERVAL IMMEDIATELY (Stop Streaming FIRST)
         if (gameIntervals.has(socket.id)) {
             clearInterval(gameIntervals.get(socket.id));
             gameIntervals.delete(socket.id);
         }
+        
+        // NOW Calculate Stop Time (After interval is cleared)
+        const stopTime = Date.now();
 
         const sessionData = await redis.get(`session:${socket.id}`);
         if (!sessionData) {
