@@ -25,49 +25,39 @@ fastify.post('/start', async (request, reply) => {
   const { userId } = request.body;
   if (!userId) return reply.code(400).send({ error: "UserId required" });
 
-  // Rate Limiting: Check if user is already playing
-  const existingSession = await redis.get(`playing:${userId}`);
-  if (existingSession) {
-    // Optional: Allow restart but log it
-  }
-
   const startTime = Date.now();
   const sessionToken = `sess_${userId}_${startTime}_${Math.random().toString(36).substr(2)}`;
+  
+  // LOGIC: Random Target between 1s and 10s (Precise)
+  const targetTime = Math.floor(Math.random() * 9000) + 1000; 
 
-  // Store in Memory (Fastest) & Redis (Backup)
-  activeSessions.set(sessionToken, { userId, startTime });
-  await redis.setex(`playing:${userId}`, 60, "true"); // Lock user for 60s (Game duration limit)
+  // Store in Memory & Redis
+  activeSessions.set(sessionToken, { userId, startTime, targetTime });
+  await redis.setex(`playing:${userId}`, 60, "true"); 
 
-  return { sessionToken, message: "Game Started", serverTime: startTime };
+  return { sessionToken, message: "Game Started", serverTime: startTime, targetTime };
 });
 
 // --- API: STOP GAME (VERIFY & RANK) ---
 fastify.post('/stop', async (request, reply) => {
-  const { sessionToken, clientTime } = request.body;
+  const { sessionToken } = request.body; // Client time nahi chahiye verification ke liye
   const endTime = Date.now();
 
   if (!activeSessions.has(sessionToken)) {
-    return reply.code(403).send({ error: "Invalid or Expired Token. Cheat Detected." });
+    return reply.code(403).send({ error: "Invalid or Expired Token" });
   }
 
   const session = activeSessions.get(sessionToken);
   const serverDuration = endTime - session.startTime;
+  const target = session.targetTime;
   
   // Cleanup
   activeSessions.delete(sessionToken);
   await redis.del(`playing:${session.userId}`);
 
-  // --- ANTI-CHEAT: LATENCY CHECK ---
-  // Client time aur Server time me difference network latency se zyada nahi hona chahiye.
-  // 500ms buffer bohot hai (agar internet slow hai).
-  // const latencyDiff = Math.abs(serverDuration - clientTime);
-  // if (latencyDiff > 1000) {
-  //   return { win: false, reason: "High Latency or Manipulation Detected" };
-  // }
-
-  // --- GAME LOGIC ---
-  const target = 5000; // Example Target (5 Seconds)
+  // --- EXACT CALCULATION ---
   const diff = Math.abs(serverDuration - target); 
+  const win = diff === 0; // EXACT MATCH REQUIRED (As per user request) 
 
   // --- LEADERBOARD UPDATE (Redis Sorted Set) ---
   // ZADD: Add to leaderboard. Score = Difference (Lower is better)
