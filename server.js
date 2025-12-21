@@ -26,13 +26,20 @@ fastify.post('/start', async (request, reply) => {
   if (!userId) return reply.code(400).send({ error: "UserId required" });
 
   const startTime = Date.now();
+  // RANDOM TARGET: 1.000s to 9.999s
+  const targetTime = Math.floor(Math.random() * 9000) + 1000; 
+  
   const sessionToken = `sess_${userId}_${startTime}_${Math.random().toString(36).substr(2)}`;
   
-  // LOGIC: Random Target between 1s and 10s (Precise)
-  const targetTime = Math.floor(Math.random() * 9000) + 1000; 
+  // SAVE FULL SESSION IN REDIS (Safe from restarts)
+  // Expire in 120 seconds (2 mins)
+  await redis.setex(`session:${sessionToken}`, 120, JSON.stringify({ 
+    userId, 
+    startTime, 
+    targetTime 
+  }));
 
-  // Store in Memory & Redis
-  activeSessions.set(sessionToken, { userId, startTime, targetTime });
+  // Also lock user to prevent multiple games
   await redis.setex(`playing:${userId}`, 60, "true"); 
 
   return { sessionToken, message: "Game Started", serverTime: startTime, targetTime };
@@ -40,24 +47,57 @@ fastify.post('/start', async (request, reply) => {
 
 // --- API: STOP GAME (VERIFY & RANK) ---
 fastify.post('/stop', async (request, reply) => {
-  const { sessionToken } = request.body; // Client time nahi chahiye verification ke liye
+  const { sessionToken } = request.body; 
   const endTime = Date.now();
 
-  if (!activeSessions.has(sessionToken)) {
-    return reply.code(403).send({ error: "Invalid or Expired Token" });
+  // GET SESSION FROM REDIS
+  const sessionData = await redis.get(`session:${sessionToken}`);
+
+  if (!sessionData) {
+    return reply.code(403).send({ error: "Session Expired or Invalid" });
   }
 
-  const session = activeSessions.get(sessionToken);
+  const session = JSON.parse(sessionData);
   const serverDuration = endTime - session.startTime;
   const target = session.targetTime;
   
   // Cleanup
-  activeSessions.delete(sessionToken);
+  await redis.del(`session:${sessionToken}`);
   await redis.del(`playing:${session.userId}`);
 
   // --- EXACT CALCULATION ---
+  // Server checks the difference
   const diff = Math.abs(serverDuration - target); 
-  const win = diff === 0; // EXACT MATCH REQUIRED (As per user request) 
+  const win = diff === 0; // EXACT MATCH
+
+  // ... (rest of leaderboard logic) ...
+
+  // Update Leaderboard code logic below needs to be preserved or re-added if not visible in this block
+  // Assuming the rest of the file remains, just updating this handler part.
+  
+  // --- LEADERBOARD UPDATE ---
+  await redis.zadd('global_tournament_v1', diff, session.userId);
+  
+  const rank = await redis.zrank('global_tournament_v1', session.userId);
+  const totalPlayers = await redis.zcard('global_tournament_v1');
+  const top3 = await redis.zrange('global_tournament_v1', 0, 2, 'WITHSCORES');
+  
+  const formattedTop3 = [];
+  for(let i=0; i<top3.length; i+=2) {
+    formattedTop3.push({ user: top3[i], score: top3[i+1] });
+  }
+
+  return {
+    success: true,
+    serverDuration,
+    diff,
+    rank: rank + 1,
+    totalPlayers,
+    topLeaders: formattedTop3,
+    win,
+    targetTime: target 
+  };
+}); 
 
   // --- LEADERBOARD UPDATE (Redis Sorted Set) ---
   // ZADD: Add to leaderboard. Score = Difference (Lower is better)
