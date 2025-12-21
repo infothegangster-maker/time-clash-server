@@ -54,9 +54,9 @@ fastify.post('/start-timer', async (request, reply) => {
   return { success: true, serverStartTime: session.startTime };
 });
 
-// --- API: STOP GAME (SECURE SERVER VERIFICATION) ---
+// --- API: STOP GAME (PURE SERVER AUTHORITY) ---
 fastify.post('/stop', async (request, reply) => {
-  const { sessionToken, clientTime } = request.body; 
+  const { sessionToken } = request.body; // Client Time ki zarurat nahi
   const endTime = Date.now();
   
   // GET SESSION
@@ -64,30 +64,14 @@ fastify.post('/stop', async (request, reply) => {
   if (!sessionData) return reply.code(403).send({ error: "Invalid Session" });
   
   let session = (typeof sessionData === 'string') ? JSON.parse(sessionData) : sessionData;
+  
+  // SERVER CALCULATES EVERYTHING
+  const serverDuration = endTime - session.startTime;
   const target = session.targetTime;
   
-  // --- SERVER SIDE SECURITY CHECK ---
-  // Server calculates how much time actually passed
-  const serverDuration = endTime - session.startTime;
-  
-  // Lag Calculation: Server Time hamesha Client Time se thoda zyada hoga (Network Delay)
-  // Example: Client ne 5s pe roka, Server tak pahunchte pahunchte 5.2s ho gaya.
-  // Diff = 200ms (Valid).
-  // Agar Client bole 5s, par Server pe 10s ho gaya -> CHEAT!
-  
-  const lag = serverDuration - clientTime;
-  
-  // ALLOWED LAG LIMIT: 2000ms (2 Seconds for bad internet)
-  // Agar 2 second se zyada ka jhoot bola -> CHEAT DETECTED
-  if (Math.abs(lag) > 2000) {
-      console.log(`CHEAT DETECTED: User:${session.userId} Client:${clientTime} Server:${serverDuration}`);
-      return reply.code(400).send({ error: "Cheat Detected! Time mismatch." });
-  }
-
-  // --- APPROVED! DO CALCULATION ON SERVER ---
-  // Ab hum ClientTime use karenge Calculation ke liye kyuki Server ne Verify kar liya hai ki ye time sahi range me hai.
-  const diff = Math.abs(clientTime - target); 
-  const win = diff === 0; // EXACT MATCH
+  // Simple Calculation: Diff between Actual Time and Target
+  const diff = Math.abs(serverDuration - target); 
+  const win = diff === 0; 
 
   // Cleanup ONLY IF WIN
   if (win) {
@@ -105,6 +89,7 @@ fastify.post('/stop', async (request, reply) => {
   
   return {
     success: true,
+    serverDuration, // Return exact server time so user knows
     diff,
     win,
     rank: rank + 1,
