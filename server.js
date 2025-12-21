@@ -54,23 +54,20 @@ fastify.post('/start-timer', async (request, reply) => {
   return { success: true, serverStartTime: session.startTime };
 });
 
-// --- API: STOP GAME (PURE SERVER AUTHORITY) ---
+// --- API: STOP GAME (CLIENT AUTHORITY) ---
 fastify.post('/stop', async (request, reply) => {
-  const { sessionToken } = request.body; // Client Time ki zarurat nahi
-  const endTime = Date.now();
+  const { sessionToken, clientTime } = request.body; // Client Time use karenge (Jitna usne roka)
   
   // GET SESSION
   const sessionData = await redis.get(`session:${sessionToken}`);
   if (!sessionData) return reply.code(403).send({ error: "Invalid Session" });
   
   let session = (typeof sessionData === 'string') ? JSON.parse(sessionData) : sessionData;
-  
-  // SERVER CALCULATES EVERYTHING
-  const serverDuration = endTime - session.startTime;
   const target = session.targetTime;
   
-  // Simple Calculation: Diff between Actual Time and Target
-  const diff = Math.abs(serverDuration - target); 
+  // LOGIC: Target - Screen Time = Diff
+  // No verification, no cheat check. Pure trust on client visual.
+  const diff = Math.abs(clientTime - target); 
   const win = diff === 0; 
 
   // Cleanup ONLY IF WIN
@@ -89,7 +86,6 @@ fastify.post('/stop', async (request, reply) => {
   
   return {
     success: true,
-    serverDuration, // Return exact server time so user knows
     diff,
     win,
     rank: rank + 1,
