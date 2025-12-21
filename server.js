@@ -54,9 +54,10 @@ fastify.post('/start-timer', async (request, reply) => {
   return { success: true, serverStartTime: session.startTime };
 });
 
-// --- API: STOP GAME (VERIFY & RANK) ---
+// --- API: STOP GAME (SECURE SERVER VERIFICATION) ---
 fastify.post('/stop', async (request, reply) => {
-  const { sessionToken, clientTime } = request.body; // CLIENT TIME LERE HAIN AB
+  const { sessionToken, clientTime } = request.body; 
+  const endTime = Date.now();
   
   // GET SESSION
   const sessionData = await redis.get(`session:${sessionToken}`);
@@ -65,8 +66,26 @@ fastify.post('/stop', async (request, reply) => {
   let session = (typeof sessionData === 'string') ? JSON.parse(sessionData) : sessionData;
   const target = session.targetTime;
   
-  // LOGIC CHANGE: Use Client Time for Calculation (WYSIWYG)
-  // Server time is only checked for extreme cheating (e.g. stopping time without starting)
+  // --- SERVER SIDE SECURITY CHECK ---
+  // Server calculates how much time actually passed
+  const serverDuration = endTime - session.startTime;
+  
+  // Lag Calculation: Server Time hamesha Client Time se thoda zyada hoga (Network Delay)
+  // Example: Client ne 5s pe roka, Server tak pahunchte pahunchte 5.2s ho gaya.
+  // Diff = 200ms (Valid).
+  // Agar Client bole 5s, par Server pe 10s ho gaya -> CHEAT!
+  
+  const lag = serverDuration - clientTime;
+  
+  // ALLOWED LAG LIMIT: 2000ms (2 Seconds for bad internet)
+  // Agar 2 second se zyada ka jhoot bola -> CHEAT DETECTED
+  if (Math.abs(lag) > 2000) {
+      console.log(`CHEAT DETECTED: User:${session.userId} Client:${clientTime} Server:${serverDuration}`);
+      return reply.code(400).send({ error: "Cheat Detected! Time mismatch." });
+  }
+
+  // --- APPROVED! DO CALCULATION ON SERVER ---
+  // Ab hum ClientTime use karenge Calculation ke liye kyuki Server ne Verify kar liya hai ki ye time sahi range me hai.
   const diff = Math.abs(clientTime - target); 
   const win = diff === 0; // EXACT MATCH
 
@@ -76,12 +95,11 @@ fastify.post('/stop', async (request, reply) => {
       await redis.del(`playing:${session.userId}`);
   }
 
-  // Update Leaderboard if Win or Close
+  // Update Leaderboard
   if (win || diff < 100) {
       await redis.zadd('global_tournament_v1', { score: diff, member: session.userId });
   }
   
-  // ... (Leaderboard fetch logic same as before) ...
   const rank = await redis.zrank('global_tournament_v1', session.userId);
   const totalPlayers = await redis.zcard('global_tournament_v1');
   
