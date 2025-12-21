@@ -1,0 +1,57 @@
+# TIME CLASH SERVER - ENVIRONMENT VARIABLES GUIDE
+
+## Ye Variables Render Dashboard Me Add Karne Hain:
+
+### 1. REDIS_URL
+```
+Value: https://your-redis-instance.upstash.io
+Source: Upstash Dashboard → Your Database → REST API → UPSTASH_REDIS_REST_URL
+```
+
+### 2. REDIS_TOKEN
+```
+Value: AXasdfGHJKLqwerty1234567890
+Source: Upstash Dashboard → Your Database → REST API → UPSTASH_REDIS_REST_TOKEN
+```
+
+### 3. JWT_SECRET
+```
+Value: TimeCLash_Super_Secret_2025_HACK_PROOF
+Note: Koi bhi random long string (minimum 32 characters)
+```
+
+### 4. PORT (Optional)
+```
+Value: 3000
+Note: Render automatically set karta hai, agar manually chahiye to add karo
+```
+
+---
+
+## How to Add in Render:
+
+1. Go to: https://dashboard.render.com/
+2. Click on your service: **time-clash-server**
+3. Left sidebar → **Environment** tab
+4. Click: **Add Environment Variable**
+5. Enter Key and Value
+6. Click: **Save Changes**
+7. Service will auto-deploy
+
+---
+
+## Testing:
+
+After adding variables, test API:
+```
+https://time-clash-server.onrender.com/
+```
+
+Should return:
+```json
+{
+  "status": "Time Clash Server Online",
+  "players": 0
+}
+```
+
