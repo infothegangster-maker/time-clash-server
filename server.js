@@ -1,10 +1,12 @@
 require('dotenv').config();
 const fastify = require('fastify')({ logger: true });
-const Redis = require('ioredis');
+const { Redis } = require('@upstash/redis');
 
-// --- 1. CONNECT TO REDIS (The Speed Engine) ---
-// Redis URL format: redis://:PASSWORD@HOST:PORT
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+// --- 1. CONNECT TO REDIS (Upstash REST API - Perfect for Serverless) ---
+const redis = new Redis({
+  url: process.env.REDIS_URL,
+  token: process.env.REDIS_TOKEN
+});
 
 fastify.register(require('@fastify/cors'), { 
   origin: "*" // Production me isse apni app ke domain/package id pe lock karenge
