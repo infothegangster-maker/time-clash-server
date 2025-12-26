@@ -45,31 +45,61 @@ function formatTime(ms) {
     return `${String(seconds).padStart(2, '0')}:${String(milliseconds).padStart(3, '0')}`;
 }
 
-// Store active game intervals
+// --- IN-MEMORY STORES (For Extreme Performance) ---
 const gameIntervals = new Map();
+const sessionStore = new Map(); // Replaces Redis for hot session data
+let cachedTop3 = []; // Cache leaderboard to reduce reads
+
+// Background Task: Refresh Leaderboard Cache (Every 5 seconds)
+setInterval(async () => {
+    try {
+        const top3 = await redis.zrange('tournament_v1', 0, 2, { withScores: true });
+        const formattedTop3 = [];
+        if (Array.isArray(top3)) {
+            for(let item of top3) {
+               if(item.member) formattedTop3.push({ user: item.member, score: item.score });
+               else formattedTop3.push({ user: 'Player', score: item });
+            }
+        }
+        cachedTop3 = formattedTop3;
+    } catch (e) {
+        console.error("Leaderboard Cache Error:", e);
+    }
+}, 5000);
 
 io.on('connection', (socket) => {
     console.log('User Connected:', socket.id);
 
-            // 1. INIT GAME
+    // 1. INIT GAME
     socket.on('init_game', async (data) => {
         const userId = data.userId || socket.id;
         const targetTime = Math.floor(Math.random() * 9000) + 1000; 
         
-        // Fetch User's Best Score & Rank from Tournament Leaderboard
-        const bestScoreStr = await redis.zscore('tournament_v1', userId);
-        const currentRank = await redis.zrank('tournament_v1', userId);
+        // Fetch Best Score & Rank (Can be optimized to cache per user, but let's keep one read for accuracy)
+        let bestScore = null;
+        let currentRank = null;
         
-        const bestScore = bestScoreStr ? parseFloat(bestScoreStr) : null;
+        try {
+            // Parallel Fetch
+            const [score, rank] = await Promise.all([
+                redis.zscore('tournament_v1', userId),
+                redis.zrank('tournament_v1', userId)
+            ]);
+            bestScore = score;
+            currentRank = rank;
+        } catch(e) { console.error(e); }
 
-        // Save Session in Redis
-        await redis.set(`session:${socket.id}`, JSON.stringify({
+        bestScore = bestScore ? parseFloat(bestScore) : null;
+
+        // STORE IN MEMORY (Fast Access)
+        const session = {
             userId,
             targetTime,
             startTime: 0,
             status: 'ready',
-            bestScore: bestScore // Cache best score in session
-        }), { ex: 300 });
+            bestScore: bestScore
+        };
+        sessionStore.set(socket.id, session);
 
         // Send Target + Current Rank/Best to Client
         socket.emit('game_ready', { 
@@ -82,13 +112,13 @@ io.on('connection', (socket) => {
 
     // 2. START CLOUD TIMER
     socket.on('start_timer', async () => {
-        // ... (Same logic, simple start update)
-        const sessionData = await redis.get(`session:${socket.id}`);
-        if (!sessionData) return;
+        // READ FROM MEMORY (Zero Latency, No DB Cost)
+        const session = sessionStore.get(socket.id);
+        if (!session) return;
         
         const startTime = Date.now();
         
-        // Start Interval (Stream Time)
+        // Start Interval (Stream Time to Client)
         if (gameIntervals.has(socket.id)) clearInterval(gameIntervals.get(socket.id));
         
         const intervalId = setInterval(() => {
@@ -100,11 +130,10 @@ io.on('connection', (socket) => {
         
         gameIntervals.set(socket.id, intervalId);
         
-        // Update Redis Session
-        const session = (typeof sessionData === 'string') ? JSON.parse(sessionData) : sessionData;
+        // Update Memory
         session.startTime = startTime;
         session.status = 'running';
-        await redis.set(`session:${socket.id}`, JSON.stringify(session), { ex: 120 });
+        // No Redis write needed here! Memory is enough for active game state.
     });
 
     // 3. STOP CLOUD TIMER (Tournament Logic)
@@ -117,13 +146,13 @@ io.on('connection', (socket) => {
         
         const stopTime = Date.now();
 
-        const sessionData = await redis.get(`session:${socket.id}`);
-        if (!sessionData) {
+        // READ FROM MEMORY
+        const session = sessionStore.get(socket.id);
+        if (!session) {
             socket.emit('game_over', { error: "Invalid Session" });
             return;
         }
 
-        const session = (typeof sessionData === 'string') ? JSON.parse(sessionData) : sessionData;
         const serverDuration = stopTime - session.startTime;
         const target = session.targetTime;
         
@@ -136,36 +165,24 @@ io.on('connection', (socket) => {
         let rank = null;
         let bestScore = session.bestScore;
 
-        // Only update DB if:
-        // 1. No previous best score (First time playing)
-        // 2. New diff is BETTER (lower) than previous best
+        // ONLY Update Redis if High Score
         if (bestScore === null || diff < bestScore) {
             newRecord = true;
             bestScore = diff;
+            session.bestScore = bestScore; // Update memory cache
             
-            // UPDATE REDIS (Only on High Score)
-            await redis.zadd('tournament_v1', { score: diff, member: session.userId });
-            
-            // Get Updated Rank
-            const rankIndex = await redis.zrank('tournament_v1', session.userId);
-            rank = rankIndex !== null ? rankIndex + 1 : null;
+            try {
+                // UPDATE REDIS
+                await redis.zadd('tournament_v1', { score: diff, member: session.userId });
+                // Get Updated Rank
+                const rankIndex = await redis.zrank('tournament_v1', session.userId);
+                rank = rankIndex !== null ? rankIndex + 1 : null;
+            } catch(e) { console.error(e); }
         } else {
-            // Bad score - Just get previous rank (No DB Write)
-            // Ideally we cache rank too, but for accuracy we can read rank (Read is cheap)
-            const rankIndex = await redis.zrank('tournament_v1', session.userId);
-            rank = rankIndex !== null ? rankIndex + 1 : null;
+            // No DB interaction for bad scores!
         }
 
-        // Get Top 3 for Leaderboard Display
-        const top3 = await redis.zrange('tournament_v1', 0, 2, { withScores: true });
-        const formattedTop3 = [];
-        if (Array.isArray(top3)) {
-            for(let item of top3) {
-               if(item.member) formattedTop3.push({ user: item.member, score: item.score });
-               else formattedTop3.push({ user: 'Player', score: item });
-            }
-        }
-
+        // Use Cached Leaderboard (Zero Read Cost)
         socket.emit('game_result', {
             win,
             diff,
@@ -173,8 +190,8 @@ io.on('connection', (socket) => {
             targetTimeStr: formatTime(target),
             rank,
             bestScore,
-            newRecord, // Tell client if this was a high score
-            topLeaders: formattedTop3
+            newRecord,
+            topLeaders: cachedTop3 // From Memory Cache
         });
     });
 
@@ -183,6 +200,8 @@ io.on('connection', (socket) => {
             clearInterval(gameIntervals.get(socket.id));
             gameIntervals.delete(socket.id);
         }
+        // Clear memory
+        sessionStore.delete(socket.id);
         console.log('User Disconnected:', socket.id);
     });
 });
