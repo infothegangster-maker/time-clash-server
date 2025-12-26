@@ -48,10 +48,15 @@ function formatTime(ms) {
 // --- IN-MEMORY STORES (For Extreme Performance) ---
 const gameIntervals = new Map();
 const sessionStore = new Map(); // Replaces Redis for hot session data
-let cachedTop3 = []; // Cache leaderboard to reduce reads
+let cachedTop3 = []; // Cache leaderboard
+let lastLeaderboardUpdate = 0; // Timestamp
 
-// Background Task: Refresh Leaderboard Cache (Every 5 seconds)
-setInterval(async () => {
+// Helper: Refresh Leaderboard Cache (Only on Demand)
+async function refreshLeaderboardCache() {
+    const now = Date.now();
+    // Cache valid for 10 seconds
+    if (now - lastLeaderboardUpdate < 10000) return; 
+
     try {
         const top3 = await redis.zrange('tournament_v1', 0, 2, { withScores: true });
         const formattedTop3 = [];
@@ -62,16 +67,21 @@ setInterval(async () => {
             }
         }
         cachedTop3 = formattedTop3;
+        lastLeaderboardUpdate = now;
+        console.log("Leaderboard Cache Updated");
     } catch (e) {
         console.error("Leaderboard Cache Error:", e);
     }
-}, 5000);
+}
 
 io.on('connection', (socket) => {
     console.log('User Connected:', socket.id);
 
     // 1. INIT GAME
     socket.on('init_game', async (data) => {
+        // Refresh Leaderboard Cache (On Demand - Lazy Loading)
+        await refreshLeaderboardCache();
+
         const userId = data.userId || socket.id;
         const targetTime = Math.floor(Math.random() * 9000) + 1000; 
         
