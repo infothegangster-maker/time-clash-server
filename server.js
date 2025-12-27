@@ -226,15 +226,19 @@ io.on('connection', (socket) => {
         }
 
         // Use Cached Leaderboard (Zero Read Cost)
-        socket.emit('game_result', {
-            win,
-            diff,
-            finalTimeStr: formatTime(serverDuration),
-            targetTimeStr: formatTime(target),
-            rank,
-            bestScore,
-            newRecord,
-            topLeaders: cachedTop3 // From Memory Cache
+        // OPTIMIZED PAYLOAD (Short Keys to save bandwidth)
+        // w: win, d: diff, ft: finalTime, tt: targetTime, r: rank, bs: bestScore, nr: newRecord, tl: topLeaders
+        const optimizedLeaders = cachedTop3.map(p => ({ u: p.user, s: p.score }));
+
+        socket.emit('gr', { // 'gr' = game_result
+            w: win ? 1 : 0,
+            d: diff,
+            ft: serverDuration,
+            tt: target,
+            r: rank,
+            bs: bestScore,
+            nr: newRecord ? 1 : 0,
+            tl: optimizedLeaders
         });
     });
 
