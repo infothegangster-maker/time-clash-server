@@ -107,12 +107,12 @@ async function refreshLeaderboardCache() {
 io.on('connection', (socket) => {
     console.log('User Connected:', socket.id);
 
-    // 1. INIT GAME
-    socket.on('init_game', async (data) => {
+    // 1. INIT GAME -> 'ig'
+    socket.on('ig', async (data) => {
         // Refresh Leaderboard Cache (On Demand - Lazy Loading)
-        refreshLeaderboardCache(); // Don't await to not block init
+        refreshLeaderboardCache(); 
 
-        const userId = data.userId || socket.id;
+        const userId = data.u || socket.id; // 'u' instead of 'userId'
         const targetTime = Math.floor(Math.random() * 9000) + 1000; 
         
         // Fetch Best Score & Rank 
@@ -141,17 +141,17 @@ io.on('connection', (socket) => {
         };
         sessionStore.set(socket.id, session);
 
-        // Send Target + Current Rank/Best to Client
-        socket.emit('game_ready', { 
-            targetTimeStr: formatTime(targetTime),
-            targetTime: targetTime,
-            bestScore: bestScore !== null ? bestScore : "NA",
-            rank: currentRank !== null ? currentRank + 1 : "UNRANKED"
+        // Send Target + Current Rank/Best to Client -> 'grd'
+        // OPTIMIZED: t=target, b=best(-1 if null), r=rank(-1 if null)
+        socket.emit('grd', { 
+            t: targetTime,
+            b: bestScore !== null ? bestScore : -1,
+            r: currentRank !== null ? currentRank + 1 : -1
         });
     });
 
-    // 2. START CLOUD TIMER
-    socket.on('start_timer', async () => {
+    // 2. START CLOUD TIMER -> 'st'
+    socket.on('st', async () => {
         // READ FROM MEMORY (Zero Latency, No DB Cost)
         const session = sessionStore.get(socket.id);
         if (!session) return;
@@ -161,13 +161,10 @@ io.on('connection', (socket) => {
         // Start Interval (Stream Time to Client)
         if (gameIntervals.has(socket.id)) clearInterval(gameIntervals.get(socket.id));
         
-        // OPTIMIZATION: 
-        // 1. Interval 100ms (10 FPS) - Saves 50% Bandwidth
-        // 2. Send Only Integer (No JSON String) - Saves 80% Data Packet Size
+        // OPTIMIZATION: 100ms interval, raw integer
         const intervalId = setInterval(() => {
             const now = Date.now();
             const elapsed = now - startTime;
-            // Send event 't' (short for timer) with raw integer
             socket.emit('t', elapsed);
         }, 100);
         
@@ -178,8 +175,8 @@ io.on('connection', (socket) => {
         session.status = 'running';
     });
 
-    // 3. STOP CLOUD TIMER (Tournament Logic)
-    socket.on('stop_timer', async () => {
+    // 3. STOP CLOUD TIMER -> 'sp'
+    socket.on('sp', async () => {
         // KILL INTERVAL IMMEDIATELY
         if (gameIntervals.has(socket.id)) {
             clearInterval(gameIntervals.get(socket.id));
