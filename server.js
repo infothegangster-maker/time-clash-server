@@ -1,13 +1,25 @@
 require('dotenv').config();
 const fastify = require('fastify')({ logger: true });
 const socketIo = require('socket.io');
-const { Redis } = require('@upstash/redis');
 
-// --- REDIS SETUP ---
-const redis = new Redis({
-  url: process.env.REDIS_URL,
-  token: process.env.REDIS_TOKEN
-});
+// --- HYBRID REDIS SETUP ---
+let redis;
+const REDIS_URL = process.env.REDIS_URL;
+
+if (REDIS_URL && REDIS_URL.includes('upstash')) {
+    // USE UPSTASH HTTP CLIENT (Serverless)
+    console.log("🔌 Connecting to Upstash Redis (HTTP Mode)");
+    const { Redis } = require('@upstash/redis');
+    redis = new Redis({
+        url: process.env.REDIS_URL,
+        token: process.env.REDIS_TOKEN
+    });
+} else {
+    // USE STANDARD REDIS CLIENT (TCP Mode - AWS/Render/Local)
+    console.log("🔌 Connecting to Standard Redis (TCP Mode)");
+    const IORedis = require('ioredis');
+    redis = new IORedis(REDIS_URL || 'redis://localhost:6379');
+}
 
 // --- FASTIFY SETUP ---
 fastify.register(require('@fastify/cors'), { origin: "*" });
@@ -58,14 +70,32 @@ async function refreshLeaderboardCache() {
     if (now - lastLeaderboardUpdate < 10000) return; 
 
     try {
-        const top3 = await redis.zrange('tournament_v1', 0, 2, { withScores: true });
+        // Standardize response format (Upstash returns array differently sometimes)
+        // IORedis returns ['member', 'score', 'member', 'score'] or objects depending on version
+        // Let's assume standard 'WITHSCORES' behavior returns flat array [m, s, m, s] in IORedis
+        
+        const top3 = await redis.zrange('tournament_v1', 0, 2, 'WITHSCORES');
+        
         const formattedTop3 = [];
+        // Handle different return formats (Upstash SDK vs IORedis)
+        // Upstash SDK usually returns objects or array depending on config, but we used WITHSCORES
+        // Let's handle flat array [user1, score1, user2, score2] which is common
+        
         if (Array.isArray(top3)) {
-            for(let item of top3) {
-               if(item.member) formattedTop3.push({ user: item.member, score: item.score });
-               else formattedTop3.push({ user: 'Player', score: item });
+            // Check if result is objects (Upstash sometimes) or flat array
+            if (top3.length > 0 && typeof top3[0] === 'object' && top3[0].member) {
+                 // Upstash Object format
+                 for(let item of top3) {
+                     formattedTop3.push({ user: item.member, score: item.score });
+                 }
+            } else {
+                 // Flat array format [u, s, u, s] (IORedis / Standard)
+                 for(let i=0; i<top3.length; i+=2) {
+                     formattedTop3.push({ user: top3[i], score: top3[i+1] });
+                 }
             }
         }
+        
         cachedTop3 = formattedTop3;
         lastLeaderboardUpdate = now;
         console.log("Leaderboard Cache Updated");
@@ -80,12 +110,12 @@ io.on('connection', (socket) => {
     // 1. INIT GAME
     socket.on('init_game', async (data) => {
         // Refresh Leaderboard Cache (On Demand - Lazy Loading)
-        await refreshLeaderboardCache();
+        refreshLeaderboardCache(); // Don't await to not block init
 
         const userId = data.userId || socket.id;
         const targetTime = Math.floor(Math.random() * 9000) + 1000; 
         
-        // Fetch Best Score & Rank (Can be optimized to cache per user, but let's keep one read for accuracy)
+        // Fetch Best Score & Rank 
         let bestScore = null;
         let currentRank = null;
         
@@ -143,7 +173,6 @@ io.on('connection', (socket) => {
         // Update Memory
         session.startTime = startTime;
         session.status = 'running';
-        // No Redis write needed here! Memory is enough for active game state.
     });
 
     // 3. STOP CLOUD TIMER (Tournament Logic)
@@ -183,7 +212,8 @@ io.on('connection', (socket) => {
             
             try {
                 // UPDATE REDIS
-                await redis.zadd('tournament_v1', { score: diff, member: session.userId });
+                await redis.zadd('tournament_v1', diff, session.userId); // Standard args for ioredis (score, member)
+                
                 // Get Updated Rank
                 const rankIndex = await redis.zrank('tournament_v1', session.userId);
                 rank = rankIndex !== null ? rankIndex + 1 : null;
