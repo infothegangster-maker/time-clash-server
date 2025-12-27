@@ -161,12 +161,15 @@ io.on('connection', (socket) => {
         // Start Interval (Stream Time to Client)
         if (gameIntervals.has(socket.id)) clearInterval(gameIntervals.get(socket.id));
         
+        // OPTIMIZATION: 
+        // 1. Interval 100ms (10 FPS) - Saves 50% Bandwidth
+        // 2. Send Only Integer (No JSON String) - Saves 80% Data Packet Size
         const intervalId = setInterval(() => {
             const now = Date.now();
             const elapsed = now - startTime;
-            const timeStr = formatTime(elapsed);
-            socket.emit('timer_update', { timeStr, elapsed });
-        }, 50);
+            // Send event 't' (short for timer) with raw integer
+            socket.emit('t', elapsed);
+        }, 100);
         
         gameIntervals.set(socket.id, intervalId);
         
