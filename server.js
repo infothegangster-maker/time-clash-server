@@ -182,9 +182,9 @@ io.on('connection', (socket) => {
         if (gameIntervals.has(socket.id)) clearInterval(gameIntervals.get(socket.id));
 
         const intervalId = setInterval(() => {
-            // const now = Date.now();
-            // const elapsed = now - startTime;
-            // socket.emit('t', elapsed); // DISABLED TO SAVE BANDWIDTH
+            const now = Date.now();
+            const elapsed = now - startTime;
+            socket.emit('t', elapsed);
         }, 100);
 
         gameIntervals.set(socket.id, intervalId);
