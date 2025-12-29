@@ -220,8 +220,8 @@ io.on('connection', (socket) => {
         let rank = null;
         let bestScore = session.bestScore;
 
-        // Submit to the tournament that is CURRENTLY active (simplifies logic)
-        const currentTournamentId = getTournamentKey();
+        // Submit to the tournament that is CURRENTLY active
+        const currentTournamentId = getTournamentKey(session.startTime); // Use START time to handle hour boundary items
 
         // ONLY Update Redis if High Score (Lower Diff is Better)
         if (bestScore === null || diff < bestScore) {
@@ -231,6 +231,9 @@ io.on('connection', (socket) => {
 
             try {
                 // UPDATE REDIS
+                // Uses 'LT' (Less Than) option if available in newer Redis, 
+                // but our manual check above covers it. 
+                // We overwrite because we already verified it's better.
                 await redis.zadd(currentTournamentId, diff, session.userId);
 
                 // Get Updated Rank
@@ -238,7 +241,7 @@ io.on('connection', (socket) => {
                 rank = rankIndex !== null ? rankIndex + 1 : null;
             } catch (e) { console.error(e); }
         } else {
-            // Fetch current rank anyway
+            // Fetch current rank anyway (even if score didn't improve)
             try {
                 const rankIndex = await redis.zrank(currentTournamentId, session.userId);
                 rank = rankIndex !== null ? rankIndex + 1 : null;
