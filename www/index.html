@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Clash Loading...</title>
+    <style>
+        body { background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+    </style>
+</head>
+<body>
+    <script>
+        // --- ROUTER LOGIC ---
+        (function() {
+            const userId = localStorage.getItem('tc_user_id');
+            const username = localStorage.getItem('tc_username');
+
+            if (!userId) {
+                // No User ID -> Login Page
+                window.location.href = 'login.html';
+            } else if (!username) {
+                // User ID exists but No Name -> Setup Profile
+                window.location.href = 'username.html';
+            } else {
+                // All Good -> Home Page
+                window.location.href = 'home.html';
+            }
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tournament Details</title>
+    <script>
+        // SHARK STRATEGY: JS-Based Fixed Design Resolution
+        (function () {
+            function setScale() {
+                const designWidth = 414;
+                const innerW = window.innerWidth;
+                const innerH = window.innerHeight;
+                const scale = innerW / designWidth;
+
+                document.body.style.zoom = scale;
+                // CRITICAL FIX: Correct Height for Vertical Centering
+                document.body.style.height = (innerH / scale) + 'px';
+                document.body.style.width = '414px';
+            }
+            window.addEventListener('resize', setScale);
+            window.addEventListener('DOMContentLoaded', setScale);
+
+            // Immediate run
+            const scale = window.innerWidth / 414;
+            document.write('<style>body { zoom: ' + scale + '; height: ' + (window.innerHeight / scale) + 'px; width: 414px; }</style>');
+        })();
+    </script>
+    <meta name="theme-color" content="#1e293b">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Teko:wght@400;600;700&family=Roboto+Mono:wght@500&family=Fredoka+One&display=swap');
+
+        :root {
+            --primary: #FFD700;
+            --accent: #00f2ff;
+            --bg: #1e293b;
+            --panel: rgba(255, 255, 255, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #fff;
+            font-family: 'Teko', sans-serif;
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .back-btn {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: none;
+            border: none;
+            color: #64748b;
+            font-size: 1.8rem;
+            cursor: pointer;
+            z-index: 10;
+            padding: 5px;
+            line-height: 1;
+        }
+
+        .back-btn:hover {
+            color: #fff;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 450px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+
+        /* CARD STYLE */
+        .info-card {
+            background: var(--panel);
+            border-radius: 25px;
+            padding: 40px 20px 30px;
+            /* Added top padding for button space */
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0;
+            line-height: 1;
+            background: -webkit-linear-gradient(#FFD700, #b8860b);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+        }
+
+        .subtitle {
+            color: #aaa;
+            font-size: 1.2rem;
+            letter-spacing: 1px;
+            margin-bottom: 20px;
+        }
+
+        .prize-pool {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            width: 100%;
+            /* Ensure full width */
+        }
+
+        .prize-val {
+            font-size: 3rem;
+            color: #FFD700;
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        .timer-box {
+            font-family: 'Roboto Mono', monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 10px;
+            color: #00f2ff;
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            display: inline-block;
+        }
+
+        /* TRYS SECTION */
+        .trys-display {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            font-family: 'Fredoka One', cursive;
+        }
+
+        .btn-enter {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            border: none;
+            color: white;
+            padding: 15px;
+            width: 100%;
+            font-size: 1.5rem;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 5px 0 #b45309;
+            font-family: 'Teko', sans-serif;
+            text-transform: uppercase;
+        }
+
+        .btn-enter:active {
+            transform: translateY(2px);
+            box-shadow: 0 3px 0 #b45309;
+        }
+
+        /* REFILL BUTTONS */
+        .refill-options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .refill-btn {
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            color: white;
+            font-size: 1.3rem;
+            font-family: 'Teko', sans-serif;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-12 {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            box-shadow: 0 4px 0 #1d4ed8;
+        }
+
+        .btn-20 {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            box-shadow: 0 4px 0 #15803d;
+        }
+
+        /* TOAST */
+        #message-toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 20px 30px;
+            border-radius: 15px;
+            color: white;
+            border: 1px solid #444;
+            z-index: 200;
+            display: none;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="message-toast">Loading...</div>
+
+    <div class="container">
+        <div class="info-card">
+            <button class="back-btn" onclick="window.location.href='home.html'">←</button>
+
+            <h1>Daily<br>Tournament</h1>
+            <div class="subtitle">Compete for the Grand Prize!</div>
+
+            <div class="prize-box">
+                <div style="font-size: 1rem; color: #aaa; text-transform: uppercase;">Prize Pool</div>
+                <div class="prize-val">₹10,000</div>
+            </div>
+
+            <div class="timer-box" id="countdown">Ends in: 00:00:00</div>
+
+            <div class="trys-display" id="trys-val">❤️ -- Trys</div>
+
+            <!-- ACTION AREA -->
+            <div id="action-area">
+                <!-- Injected via JS -->
+            </div>
+
+        </div>
+    </div>
+
+    <!-- AD MANAGER -->
+    <script src="ad_manager.js"></script>
+
+    <script>
+        // --- COUNTDOWN LOGIC ---
+        function startCountdown() {
+            const el = document.getElementById('countdown');
+            // Mock end time (e.g., end of day)
+            setInterval(() => {
+                const now = new Date();
+                const end = new Date();
+                end.setHours(23, 59, 59, 999);
+                const diff = end - now;
+
+                const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+                const m = Math.floor((diff / (1000 * 60)) % 60);
+                const s = Math.floor((diff / 1000) % 60);
+
+                el.innerText = `Ends in: ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            }, 1000);
+        }
+        startCountdown();
+
+        // --- TRYS LOGIC ---
+        const TrysManager = {
+            trys: parseInt(localStorage.getItem('user_trys') || '0'),
+
+            init() {
+                this.updateUI();
+            },
+
+            updateUI() {
+                this.trys = parseInt(localStorage.getItem('user_trys') || '0');
+                document.getElementById('trys-val').innerText = `❤️ ${this.trys} Trys`;
+                this.renderActionKey();
+            },
+
+            renderActionKey() {
+                const area = document.getElementById('action-area');
+                if (this.trys > 0) {
+                    area.innerHTML = `
+                        <button class="btn-enter" onclick="enterTournament()">
+                            ENTER ARENA <span style="font-size:0.8em; opacity:0.8;">(-1 ❤️)</span>
+                        </button>
+                    `;
+                } else {
+                    area.innerHTML = `
+                        <div style="color: #ef4444; font-size: 1.2rem; margin-bottom: 10px;">OUT OF TRYS!</div>
+                        <div class="refill-options">
+                            <button class="refill-btn btn-12" onclick="TrysManager.watchAd(1)">
+                                <span>📺 Watch 1 Ad</span>
+                                <span style="background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 4px;">+12 ❤️</span>
+                            </button>
+                            <button class="refill-btn btn-20" onclick="TrysManager.watchAd(2)">
+                                <span>📺 Watch 2 Ads</span>
+                                <span style="background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 4px;">+20 ❤️</span>
+                            </button>
+                        </div>
+                    `;
+                }
+            },
+
+            // SEAMLESS AD BREAK OVERLAY
+            showAdBreakOverlay(step) {
+                let overlay = document.getElementById('ad-break-overlay');
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'ad-break-overlay';
+                    overlay.style.position = 'fixed';
+                    overlay.style.top = '0';
+                    overlay.style.left = '0';
+                    overlay.style.width = '100%';
+                    overlay.style.height = '100%';
+                    overlay.style.background = 'black';
+                    overlay.style.zIndex = '2000';
+                    overlay.style.display = 'flex';
+                    overlay.style.flexDirection = 'column';
+                    overlay.style.justifyContent = 'center';
+                    overlay.style.alignItems = 'center';
+                    overlay.style.color = 'white';
+                    overlay.style.fontFamily = 'Fredoka One, cursive';
+                    document.body.appendChild(overlay);
+                }
+
+                overlay.style.display = 'flex';
+                overlay.innerHTML = `
+                    <div style="font-size: 2rem; color: #FFD700;">AD BREAK</div>
+                    <div style="font-size: 1.2rem; color: #94a3b8; margin-top: 10px;">
+                        ${step === 1 ? 'Video 1 of 2' : 'Video 2 of 2'}
+                    </div>
+                `;
+            },
+
+            hideAdBreakOverlay() {
+                const overlay = document.getElementById('ad-break-overlay');
+                if (overlay) overlay.style.display = 'none';
+            },
+
+            watchAd(count) {
+                if (count === 1) {
+                    // Promise based
+                    AdManager.showRewardVideoAd().then((success) => {
+                        if (success) this.addTrys(12);
+                    });
+                } else if (count === 2) {
+                    // SEAMLESS FLOW
+                    this.showAdBreakOverlay(1);
+
+                    setTimeout(() => {
+                        AdManager.showRewardVideoAd().then((success1) => {
+                            if (success1) {
+                                this.showAdBreakOverlay(2);
+                                setTimeout(() => {
+                                    AdManager.showRewardVideoAd().then((success2) => {
+                                        this.hideAdBreakOverlay();
+                                        if (success2) {
+                                            this.addTrys(20);
+                                        } else {
+                                            this.addTrys(12); // Fallback
+                                        }
+                                    });
+                                }, 500);
+                            } else {
+                                this.hideAdBreakOverlay();
+                            }
+                        });
+                    }, 500);
+                }
+            },
+
+            addTrys(amount) {
+                this.trys += amount;
+                localStorage.setItem('user_trys', this.trys);
+                this.updateUI();
+
+                showToast(`+${amount} Trys Added!`);
+                setTimeout(() => hideToast(), 1500);
+            }
+        };
+
+        function enterTournament() {
+            localStorage.setItem('game_mode', 'tournament');
+            // Consuming try here? Or letting Game.html consume?
+            // User flow: Click Enter -> Go to Game.
+            // Game.html logic consumes try on "START" button click. 
+            // That's redundant if we do it here. 
+            // But if we consume here, we need to tell Game.html "Already Consumed"?
+            // Simplest: Don't consume here. Just check.
+            // But wait, user said "click karke heart lene wala option", implies checking here.
+            // So we check here (rendered in UI). If valid, we go to game. 
+            // Game.html consumes on 'START'. Correct.
+            window.location.href = 'game.html';
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('message-toast');
+            t.innerText = msg;
+            t.style.display = 'block';
+        }
+
+        function hideToast() {
+            document.getElementById('message-toast').style.display = 'none';
+        }
+
+        // Init
+        document.addEventListener('deviceready', async () => {
+            await AdManager.init();
+            TrysManager.init();
+        });
+        // Browser fallback
+        TrysManager.init();
+
+    </script>
+</body>
+
+</html>

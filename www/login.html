@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Login - Time Clash</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+        
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #fff;
+            font-family: 'Fredoka One', cursive;
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .logo {
+            font-size: 3rem;
+            color: #FFD700;
+            margin-bottom: 40px;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+            text-align: center;
+        }
+
+        .login-btn {
+            width: 100%;
+            max-width: 320px;
+            padding: 15px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-family: inherit;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: transform 0.1s;
+        }
+
+        .login-btn:active { transform: scale(0.98); }
+
+        .btn-google {
+            background: #fff;
+            color: #000;
+        }
+
+        .btn-guest {
+            background: #3b82f6;
+            color: #fff;
+            box-shadow: 0 4px 0 #1d4ed8;
+        }
+
+        .divider {
+            margin: 20px 0;
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="logo">
+        TIME<br>CLASH
+    </div>
+
+    <!-- GOOGLE LOGIN (Simulation for now) -->
+    <button class="login-btn btn-google" onclick="handleGoogleLogin()">
+        <img src="https://www.svgrepo.com/show/475656/google-color.svg" width="24" height="24">
+        Login with Google
+    </button>
+
+    <div class="divider">OR</div>
+
+    <!-- GUEST LOGIN -->
+    <button class="login-btn btn-guest" onclick="handleGuestLogin()">
+        Play as Guest
+    </button>
+
+    <script>
+        function generateId() {
+            return 'user_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function handleGuestLogin() {
+            const userId = generateId();
+            localStorage.setItem('tc_user_id', userId);
+            localStorage.setItem('tc_auth_type', 'guest');
+            // Redirect to Username Setup
+            window.location.href = 'username.html';
+        }
+
+        function handleGoogleLogin() {
+            // NOTE: Real Google Auth requires Firebase/Native Plugin setup.
+            // For now, we simulate a secure login flow.
+            
+            const userId = 'goog_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('tc_user_id', userId);
+            localStorage.setItem('tc_auth_type', 'google');
+            
+            // In a real app, here we would get the name from Google
+            // But for now, let's ask the user or auto-fill
+            // Let's redirect to username setup to confirm name
+            window.location.href = 'username.html';
+        }
+    </script>
+
+</body>
+</html>

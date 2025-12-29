@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <!-- Revert to Standard Viewport for JS Scaling -->
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Time Clash Arena</title>
+    <script>
+        // SHARK STRATEGY: JS-Based Fixed Design Resolution (Like Flutter ScreenUtil)
+        // Forces the app to scale exactly to 414px width on ANY device.
+        (function () {
+            function setScale() {
+                const designWidth = 414;
+                const innerW = window.innerWidth;
+                const innerH = window.innerHeight;
+                const scale = innerW / designWidth;
+
+                document.body.style.zoom = scale;
+                // CRITICAL FIX: Correct Height for Vertical Centering
+                // When zoomed, vh units distort. We set explicit pixel height to match viewport.
+                document.body.style.height = (innerH / scale) + 'px';
+                document.body.style.width = '414px'; // Force fixed width in zoomed context
+            }
+            window.addEventListener('resize', setScale);
+            window.addEventListener('DOMContentLoaded', setScale);
+
+            // Immediate run
+            const scale = window.innerWidth / 414;
+            document.write('<style>body { zoom: ' + scale + '; height: ' + (window.innerHeight / scale) + 'px; width: 414px; }</style>');
+        })();
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Roboto+Mono:wght@500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Teko:wght@600&display=swap');
+
+        :root {
+            --bg-grad: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            --panel-bg: #1e293b;
+            --primary: #FFD700;
+            --accent: #3b82f6;
+            --success: #22c55e;
+            --text-main: #f8fafc;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background: var(--bg-grad);
+            color: var(--text-main);
+            font-family: 'Fredoka One', cursive;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .screen-container {
+            position: relative;
+            width: 100%;
+            max-width: 450px;
+            padding: 20px;
+            /* Flex Grow to fill space between Top & Bottom Ads */
+            flex: 1;
+            height: auto;
+            /* Allow dynamic height */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            margin: auto;
+            /* Horizontally center */
+            margin-top: 0;
+            /* REMOVED OFFSET */
+        }
+
+        .ui-panel {
+            background: var(--panel-bg);
+            border-radius: 25px;
+            padding: 30px 20px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            color: #fff;
+            line-height: 1.2;
+            margin-bottom: 10px;
+        }
+
+        /* --- BUTTONS --- */
+        .btn {
+            background: var(--accent);
+            border: none;
+            color: white;
+            padding: 18px 40px;
+            font-family: inherit;
+            font-size: 1.5rem;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: 0.1s;
+            width: 100%;
+            box-shadow: 0 8px 0 #1d4ed8;
+            margin-top: 15px;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+        }
+
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 4px 0 #1d4ed8;
+        }
+
+        .btn.stop {
+            background: #ef4444;
+            box-shadow: 0 8px 0 #b91c1c;
+        }
+
+        .btn.stop:active {
+            box-shadow: 0 4px 0 #b91c1c;
+        }
+
+        .btn.retry {
+            background: #3b82f6;
+            box-shadow: 0 8px 0 #1d4ed8;
+        }
+
+        .btn:disabled {
+            background: #475569;
+            box-shadow: none;
+            cursor: not-allowed;
+            color: #94a3b8;
+        }
+
+        /* --- SCREENS --- */
+        .screen {
+            display: none;
+            width: 100%;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .screen.active {
+            display: flex;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* --- TIMER AREA --- */
+        .timer-container {
+            background: #0f172a;
+            border-radius: 15px;
+            padding: 25px 20px;
+            margin-bottom: 20px;
+            margin-top: 50px;
+            /* Pushed down as requested */
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 1px solid #334155;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .comparison-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+        .comp-label {
+            color: #64748b;
+            font-size: 0.9rem;
+            width: 70px;
+            text-align: right;
+            font-weight: bold;
+            letter-spacing: 1px;
+            font-family: sans-serif;
+        }
+
+        .comp-value {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 2.4rem;
+            font-weight: 700;
+            letter-spacing: 3px;
+            color: #fff;
+            text-align: left;
+            width: 190px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+        }
+
+        .target-val {
+            color: var(--primary);
+        }
+
+        .digit-match {
+            color: var(--success);
+            text-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+        }
+
+        .digit-miss {
+            color: #ef4444;
+            animation: blink 0.5s infinite;
+            text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .diff-badge {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            margin-top: 15px;
+            display: none;
+            font-family: sans-serif;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .hearts-container {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .heart {
+            font-size: 1.5rem;
+            transition: 0.3s;
+        }
+
+        .heart.lost {
+            opacity: 0.2;
+            transform: scale(0.5);
+            filter: grayscale(100%);
+        }
+
+        .pulse {
+            animation: pulse 0.5s ease-in-out 3;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        /* BOUNCY START EFFECT */
+        .bounce-start {
+            animation: bounceStart 0.5s ease-out;
+        }
+
+        @keyframes bounceStart {
+            0% {
+                transform: scale(1);
+            }
+
+            20% {
+                transform: scale(1.08);
+            }
+
+            40% {
+                transform: scale(0.95);
+            }
+
+            60% {
+                transform: scale(1.04);
+            }
+
+            80% {
+                transform: scale(0.98);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        /* Timer Glow on Start */
+        .timer-active {
+            border-color: var(--accent) !important;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5), 0 0 15px rgba(59, 130, 246, 0.4);
+        }
+
+        /* YOU Timer Blink Animation (0.5s on Start) */
+        .timer-blink {
+            animation: timerBlink 0.5s ease-in-out;
+        }
+
+        @keyframes timerBlink {
+            0% {
+                opacity: 1;
+                text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+            }
+
+            25% {
+                opacity: 0.3;
+                text-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 30px rgba(59, 130, 246, 0.6);
+            }
+
+            50% {
+                opacity: 1;
+                text-shadow: 0 0 15px rgba(255, 255, 255, 0.4), 0 0 25px rgba(59, 130, 246, 0.7);
+            }
+
+            75% {
+                opacity: 0.4;
+                text-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 30px rgba(59, 130, 246, 0.6);
+            }
+
+            100% {
+                opacity: 1;
+                text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+            }
+        }
+
+        /* BACK BUTTON */
+        /* BACK BUTTON */
+        .back-btn {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: none;
+            border: none;
+            color: #64748b;
+            font-size: 1.8rem;
+            cursor: pointer;
+            z-index: 10;
+            padding: 5px;
+            line-height: 1;
+        }
+
+        .back-btn:hover {
+            color: #fff;
+        }
+
+        /* TOAST */
+        #message-toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 20px 30px;
+            border-radius: 15px;
+            color: white;
+            border: 1px solid #444;
+            z-index: 200;
+            display: none;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            font-family: sans-serif;
+        }
+
+
+        /* Stats Container (Above Hearts) */
+        .stats-container {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .rank-badge,
+        .best-badge,
+        .tournament-badge {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.8rem;
+            padding: 6px 12px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 12px;
+            color: #94a3b8;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(4px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .tournament-badge {
+            color: #FFD700;
+            border-color: rgba(255, 215, 0, 0.3);
+            min-width: 100px;
+        }
+
+        .new-record-anim {
+            animation: recordPulse 1s infinite;
+            color: #FFD700 !important;
+            border-color: #FFD700 !important;
+        }
+
+        @keyframes recordPulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 rgba(255, 215, 0, 0);
+            }
+
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+            }
+
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 rgba(255, 215, 0, 0);
+            }
+        }
+
+        /* REFILL POPUP */
+        #refill-popup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            /* Dark overlay */
+            z-index: 500;
+            display: none;
+            /* Hidden by default */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .refill-card {
+            background: #1e293b;
+            border-radius: 20px;
+            padding: 30px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .refill-title {
+            font-size: 2rem;
+            color: #ef4444;
+            /* Red for alert */
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .refill-btn {
+            width: 100%;
+            padding: 15px;
+            border-radius: 12px;
+            border: none;
+            color: #fff;
+            font-family: 'Teko', sans-serif;
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: transform 0.1s;
+        }
+
+        .refill-btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-12 {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            box-shadow: 0 4px 0 #1d4ed8;
+        }
+
+        .btn-20 {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            box-shadow: 0 4px 0 #b45309;
+        }
+
+        /* REPURPOSED TRYS DISPLAY (Badge Style) */
+        #game-trys-display {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.8rem;
+            padding: 6px 12px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 12px;
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(4px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            /* Reset absolute positioning */
+            position: static;
+            display: inline-block;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- TOP AD (Same as Home) -->
+    <div id="game-ad-top" style="width: 100%; height: 150px; background: transparent; flex-shrink: 0;"></div>
+
+    <!-- LOADING / MESSAGE TOAST -->
+    <div id="message-toast">Connecting to Cloud...</div>
+
+
+
+    <!-- REFILL POPUP -->
+    <div id="refill-popup">
+        <div class="refill-card">
+            <div class="refill-title">OUT OF TRYS!</div>
+            <div style="color: #94a3b8; margin-bottom: 20px;">Watch Ads to Continue Playing</div>
+
+            <!-- OPTION 1 -->
+            <button class="refill-btn btn-12" onclick="TrysManager.watchAd(1)">
+                <span>📺 Watch 1 Ad</span>
+                <span style="background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 4px;">+12 ❤️</span>
+            </button>
+
+            <!-- OPTION 2 -->
+            <button class="refill-btn btn-20" onclick="TrysManager.watchAd(2)">
+                <span>📺 Watch 2 Ads</span>
+                <span style="background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 4px;">+20 ❤️</span>
+            </button>
+
+            <button onclick="goHome()"
+                style="background: transparent; border: none; color: #64748b; margin-top: 10px; cursor: pointer;">Go
+                Home</button>
+        </div>
+    </div>
+
+    <div class="screen-container">
+
+        <!-- SCREEN: TIMER GAME -->
+        <div id="screen-hacking" class="screen active">
+            <div class="ui-panel">
+                <button class="back-btn" onclick="goHome()">←</button>
+
+                <!-- Stats (Rank & Best & Trys) -->
+                <div class="stats-container">
+                    <div class="tournament-badge" id="tournament-timer">ENDS: --:--</div>
+                    <div class="rank-badge" id="rank-display">RANK: --</div>
+                    <div class="best-badge" id="best-display">BEST: --ms</div>
+                    <div id="game-trys-display">❤️ --</div>
+                </div>
+
+                <div class="timer-container" id="timer-box">
+
+                    <!-- UNIFIED VIEW -->
+                    <div id="unified-view" style="width: 100%;">
+                        <div class="comparison-row">
+                            <span class="comp-label">TARGET</span>
+                            <span class="comp-value target-val" id="display-target">--.---</span>
+                        </div>
+                        <div class="comparison-row">
+                            <span class="comp-label">YOU</span>
+                            <span class="comp-value" id="display-timer">00.000</span>
+                        </div>
+                    </div>
+
+                    <div class="diff-badge" id="diff-badge">OFF BY 0.000</div>
+
+                </div>
+
+                <div id="hack-status"
+                    style="height: 60px; font-size: 1.1rem; color: #94a3b8; font-weight: bold; line-height: 1.3;">
+                    Waiting for Server...
+                </div>
+
+                <button id="hack-btn" class="btn" disabled>LOADING...</button>
+            </div>
+        </div>
+
+        <!-- SCREEN: RESULT -->
+        <div id="screen-result" class="screen">
+            <div class="ui-panel">
+                <h1 id="result-title">WINNER!</h1>
+                <div id="result-icon" style="font-size: 5rem; margin: 10px 0;">🎉</div>
+                <div id="result-message" style="margin: 10px 0; font-size: 1.2rem; color: #94a3b8;"></div>
+
+                <div id="reward-box"
+                    style="background: rgba(34, 197, 94, 0.1); border: 2px dashed #22c55e; padding: 15px; border-radius: 15px; margin: 20px 0;">
+                    <div style="font-size: 0.9rem; color: #22c55e;">YOUR REWARD</div>
+                    <div id="loot-gain" style="font-size: 2.5rem; color: #22c55e; font-weight: bold;">₹10,000</div>
+                    <div id="code-display"
+                        style="font-size: 1.2rem; background: #fff; color: #000; padding: 8px; margin-top: 8px; border-radius: 5px; letter-spacing: 2px; font-family: monospace;">
+                        VAULT2024</div>
+                </div>
+
+                <button class="btn retry" onclick="Game.resetToGame()">CLAIM & TRY AGAIN</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-ad-placeholder" style="width: 100%; height: 150px; background: transparent;"></div>
+
+    <!-- SOCKET.IO -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="ad_manager.js"></script>
+
+    <script>
+        // --- CLOUD CONFIG ---
+        const SERVER_URL = "https://time-clash-server.onrender.com";
+        let socket = null;
+
+        // CLEANUP & GO HOME
+        function goHome() {
+            // NO CLEANUP requested ("same native ad")
+            // AdManager.hideAllAds(); // REMOVED
+            window.location.href = 'home.html';
+        }
+
+        document.addEventListener('deviceready', () => {
+            const w = window.innerWidth;
+
+            // 1. Show TOP Ad (Same as Home)
+            setTimeout(() => {
+                AdManager.showNativeAd('game-ad-top', 'home_top', w, 150);
+            }, 500);
+
+            // 2. Show BOTTOM Ad (Same as Home)
+            setTimeout(() => {
+                AdManager.showNativeAd('game-ad-placeholder', 'home_bottom', w, 150);
+            }, 1000);
+        });
+
+        // Show Interstitial Ads Removed per user request
+        function showStrategicAd() {
+            // Logic removed
+        }
+
+        // --- TRYS MANAGER ---
+        const TrysManager = {
+            trys: 0,
+            mode: 'practice',
+
+            init() {
+                this.mode = localStorage.getItem('game_mode') || 'practice';
+                this.trys = parseInt(localStorage.getItem('user_trys') || '0');
+
+                // Update UI based on Mode
+                if (this.mode === 'practice') {
+                    document.getElementById('game-trys-display').innerText = "PRACTICE MODE";
+                    document.getElementById('game-trys-display').style.color = "#4ade80"; // Green
+                } else {
+                    this.updateUI();
+                    this.checkTrys(); // Check immediately on enter
+                }
+            },
+
+            updateUI() {
+                if (this.mode === 'tournament') {
+                    document.getElementById('game-trys-display').innerText = `❤️ ${this.trys}`;
+                    document.getElementById('game-trys-display').style.color = this.trys > 0 ? "#fff" : "#ef4444";
+                }
+            },
+
+            checkTrys() {
+                if (this.mode === 'practice') return true;
+
+                if (this.trys <= 0) {
+                    this.showRefillPopup();
+                    return false;
+                }
+                return true;
+            },
+
+            consumeTry() {
+                if (this.mode === 'practice') return true;
+
+                if (this.trys > 0) {
+                    this.trys--;
+                    localStorage.setItem('user_trys', this.trys);
+                    this.updateUI();
+                    return true;
+                } else {
+                    this.showRefillPopup();
+                    return false;
+                }
+            },
+
+            showRefillPopup() {
+                document.getElementById('refill-popup').style.display = 'flex';
+            },
+
+            // SEAMLESS AD BREAK OVERLAY
+            showAdBreakOverlay(step) {
+                let overlay = document.getElementById('ad-break-overlay');
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'ad-break-overlay';
+                    overlay.style.position = 'fixed';
+                    overlay.style.top = '0';
+                    overlay.style.left = '0';
+                    overlay.style.width = '100%';
+                    overlay.style.height = '100%';
+                    overlay.style.background = 'black';
+                    overlay.style.zIndex = '2000';
+                    overlay.style.display = 'flex';
+                    overlay.style.flexDirection = 'column';
+                    overlay.style.justifyContent = 'center';
+                    overlay.style.alignItems = 'center';
+                    overlay.style.color = 'white';
+                    overlay.style.fontFamily = 'Fredoka One, cursive';
+                    document.body.appendChild(overlay);
+                }
+
+                overlay.style.display = 'flex';
+                overlay.innerHTML = `
+                    <div style="font-size: 2rem; color: #FFD700;">AD BREAK</div>
+                    <div style="font-size: 1.2rem; color: #94a3b8; margin-top: 10px;">
+                        ${step === 1 ? 'Video 1 of 2' : 'Video 2 of 2'}
+                    </div>
+                `;
+            },
+
+            hideAdBreakOverlay() {
+                const overlay = document.getElementById('ad-break-overlay');
+                if (overlay) overlay.style.display = 'none';
+            },
+
+            watchAd(count) {
+                if (count === 1) {
+                    // Promise based
+                    AdManager.showRewardVideoAd().then((success) => {
+                        if (success) this.addTrys(12);
+                    });
+                } else if (count === 2) {
+                    // SEAMLESS FLOW
+                    this.showAdBreakOverlay(1);
+
+                    setTimeout(() => {
+                        AdManager.showRewardVideoAd().then((success1) => {
+                            if (success1) {
+                                this.showAdBreakOverlay(2);
+                                setTimeout(() => {
+                                    AdManager.showRewardVideoAd().then((success2) => {
+                                        this.hideAdBreakOverlay();
+                                        if (success2) {
+                                            this.addTrys(20);
+                                        } else {
+                                            this.addTrys(12); // Fallback
+                                        }
+                                    });
+                                }, 500);
+                            } else {
+                                this.hideAdBreakOverlay();
+                            }
+                        });
+                    }, 500);
+                }
+            },
+
+            addTrys(amount) {
+                this.trys += amount;
+                localStorage.setItem('user_trys', this.trys);
+                this.updateUI();
+                document.getElementById('refill-popup').style.display = 'none';
+
+                Hacking.showToast(`+${amount} Trys Added! Starting...`);
+                setTimeout(() => Hacking.hideToast(), 1500);
+
+                // AUTO-ENTER TOURNAMENT (Refresh Game State)
+                setTimeout(() => {
+                    Game.resetToGame();
+                }, 1000);
+            }
+        };
+
+        const Game = {
+            state: 'HACK',
+            bestMiss: Infinity,
+
+            init() {
+                TrysManager.init();
+                Hacking.init();
+                this.connectCloud();
+            },
+
+            connectCloud() {
+                Hacking.showToast("Connecting to Cloud...");
+
+                socket = io(SERVER_URL, {
+                    transports: ['websocket', 'polling']
+                });
+
+                socket.on('connect', () => {
+                    console.log("Connected to Cloud Server");
+                    Hacking.showToast("Connected!");
+                    setTimeout(() => Hacking.hideToast(), 1000);
+
+                    const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
+                    socket.emit('ig', { u: savedId });
+                });
+
+                socket.on('connect_error', (err) => {
+                    Hacking.showToast("Connection Error...");
+                    console.error(err);
+                });
+
+                socket.on('grd', (data) => {
+                    Hacking.target = data.t / 1000;
+                    const tStr = Game.formatTime(data.t);
+                    Hacking.elements.displayTarget.innerText = tStr.replace(':', '.');
+
+                    const r = data.r === -1 ? 'UNRANKED' : data.r;
+                    const b = data.b === -1 ? 'NA' : data.b;
+
+                    document.getElementById('rank-display').innerText = `RANK: #${r}`;
+                    document.getElementById('best-display').innerText = `BEST: ${b}${b !== 'NA' ? 'ms' : ''}`;
+
+                    // START TOURNAMENT TIMER
+                    if (data.tl) Game.startTournamentTimer(data.tl);
+
+                    Hacking.resetView();
+                    Hacking.readyToPlay();
+                });
+
+                socket.on('t', (ms) => {
+                    if (Hacking.state === 'RUNNING' || Hacking.state === 'STOPPING') {
+                        const seconds = Math.floor(ms / 1000);
+                        const milliseconds = Math.floor(ms % 1000);
+                        const timeStr = `${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+                        Hacking.elements.displayTimer.innerText = timeStr;
+                    }
+                });
+
+                socket.on('gr', (data) => {
+                    Hacking.handleServerResult(data);
+                    // Sync Timer
+                    if (data.rem) Game.startTournamentTimer(data.rem);
+                });
+            },
+
+            startHack() {
+                this.state = 'HACK';
+                this.switchScreen('screen-hacking');
+            },
+
+            formatTime(ms) {
+                const s = Math.floor(ms / 1000);
+                const m = Math.floor(ms % 1000);
+                return `${String(s).padStart(2, '0')}.${String(m).padStart(3, '0')}`;
+            },
+
+            finishLevel(success, message, rewardType, rewardVal) {
+                this.state = 'RESULT';
+                this.switchScreen('screen-result');
+                const title = document.getElementById('result-title');
+                const msg = document.getElementById('result-message');
+                const lootDisplay = document.getElementById('loot-gain');
+                const codeDisplay = document.getElementById('code-display');
+                const icon = document.getElementById('result-icon');
+                const rewardBox = document.getElementById('reward-box');
+
+                if (success) {
+                    title.innerText = "🎊 JACKPOT! 🎊";
+                    title.style.color = "#22c55e";
+                    icon.innerText = "💰";
+                    msg.innerHTML = "PERFECT TIMING!<br>You cracked the vault!";
+                    lootDisplay.innerText = rewardVal || "₹10,000";
+                    codeDisplay.innerText = "CODE: " + this.generateCode();
+                    codeDisplay.style.display = "block";
+                    rewardBox.style.display = "block";
+                } else {
+                    title.innerText = "SO CLOSE!";
+                    title.style.color = "#ef4444";
+                    icon.innerText = "😢";
+                    msg.innerHTML = message;
+                    rewardBox.style.display = "none";
+                }
+
+                // --- HIGH REVENUE: SHOW AD ON RESULT ---
+                // "Natural Break" - Best time for engagement
+                const w = window.innerWidth;
+                // Force a fresh refresh of the bottom ad to catch the user's eye
+                AdManager.showNativeAd('game-ad-placeholder', 'home_bottom', w, 150);
+                // ---------------------------------------
+            },
+
+            generateCode() {
+                const prefix = ["WIN", "VAULT", "PRIZE", "LUCKY"][Math.floor(Math.random() * 4)];
+                const num = Math.floor(10000 + Math.random() * 90000);
+                return prefix + num;
+            },
+
+            resetToGame() {
+                // Check Trys Logic
+                if (!TrysManager.checkTrys()) return;
+
+                const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
+                socket.emit('ig', { u: savedId });
+
+                this.startHack();
+                Hacking.resetView();
+                Hacking.elements.btn.innerText = "LOADING...";
+                Hacking.elements.btn.disabled = true;
+                Hacking.elements.btn.className = "btn";
+            },
+
+            colorizeDigits(targetStr, playerStr) {
+                let html = "";
+                if (targetStr.length !== playerStr.length) return playerStr;
+
+                for (let i = 0; i < targetStr.length; i++) {
+                    if (targetStr[i] === playerStr[i]) {
+                        html += `<span class="digit-match">${playerStr[i]}</span>`;
+                    } else {
+                        html += `<span class="digit-miss">${playerStr[i]}</span>`;
+                    }
+                }
+                return html;
+            },
+
+            switchScreen(id) {
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                document.getElementById(id).classList.add('active');
+            },
+
+            tournamentInterval: null,
+            startTournamentTimer(msLeft) {
+                if (this.tournamentInterval) clearInterval(this.tournamentInterval);
+
+                const display = document.getElementById('tournament-timer');
+                let secondsRemaining = Math.floor(msLeft / 1000);
+
+                const updateDisplay = () => {
+                    if (secondsRemaining <= 0) {
+                        display.innerText = "ENDS: 00:00";
+                        clearInterval(this.tournamentInterval);
+                        return;
+                    }
+
+                    const m = Math.floor(secondsRemaining / 60);
+                    const s = secondsRemaining % 60;
+                    display.innerText = `ENDS: ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                    secondsRemaining--;
+                };
+
+                updateDisplay(); // Immediate update
+                this.tournamentInterval = setInterval(updateDisplay, 1000);
+            }
+        };
+
+        const Hacking = {
+            target: 0,
+            state: 'IDLE',
+            elements: {
+                btn: document.getElementById('hack-btn'),
+                status: document.getElementById('hack-status'),
+                timerBox: document.getElementById('timer-box'),
+                displayTarget: document.getElementById('display-target'),
+                displayTimer: document.getElementById('display-timer'),
+                diffBadge: document.getElementById('diff-badge'),
+                toast: document.getElementById('message-toast')
+            },
+
+            init() {
+                this.resetView();
+                this.setupInputs();
+            },
+
+            showToast(msg) {
+                this.elements.toast.innerText = msg;
+                this.elements.toast.style.display = 'block';
+            },
+
+            hideToast() {
+                this.elements.toast.style.display = 'none';
+            },
+
+            resetView() {
+                this.elements.displayTimer.innerHTML = "00.000";
+                this.elements.displayTimer.style.color = "#fff";
+                this.elements.timerBox.style.borderColor = "#334155";
+                this.elements.timerBox.classList.remove('bounce-start', 'timer-active');
+                this.elements.diffBadge.style.display = "none";
+                this.elements.status.innerHTML = "Waiting for Server...";
+            },
+
+            readyToPlay() {
+                this.state = 'IDLE';
+                this.elements.btn.innerText = "START";
+                this.elements.btn.disabled = false;
+                this.elements.btn.className = "btn";
+                this.elements.status.innerHTML = "Hit STOP at exact target!";
+                this.elements.status.style.color = "#94a3b8";
+            },
+
+            setupInputs() {
+                this.elements.btn.onclick = () => this.handleInput();
+            },
+
+            handleInput() {
+                if (Game.state !== 'HACK') return;
+                if (!socket) return;
+
+                if (this.state === 'IDLE') {
+                    // BEFORE START - CHECK TRYS!
+                    if (!TrysManager.consumeTry()) return;
+
+                    // START
+                    this.state = 'RUNNING';
+                    this.elements.btn.innerText = "STOP";
+                    this.elements.btn.className = "btn stop";
+                    this.elements.status.innerText = "WAIT FOR IT...";
+
+                    this.elements.timerBox.classList.remove('bounce-start');
+                    void this.elements.timerBox.offsetWidth;
+                    this.elements.timerBox.classList.add('bounce-start', 'timer-active');
+                    setTimeout(() => {
+                        this.elements.timerBox.classList.remove('bounce-start');
+                    }, 500);
+
+                    this.elements.displayTimer.classList.remove('timer-blink');
+                    void this.elements.displayTimer.offsetWidth;
+                    this.elements.displayTimer.classList.add('timer-blink');
+                    setTimeout(() => {
+                        this.elements.displayTimer.classList.remove('timer-blink');
+                    }, 500);
+
+                    socket.emit('st');
+
+                } else if (this.state === 'RUNNING') {
+                    this.state = 'STOPPING';
+                    this.elements.btn.disabled = true;
+                    this.elements.btn.innerText = "PROCESSING...";
+                    this.elements.status.innerText = "Calculating...";
+                    socket.emit('sp');
+                }
+            },
+
+            handleServerResult(data) {
+                const diffMs = data.d;
+                const playerTimeStr = Game.formatTime(data.ft);
+                const targetStr = Game.formatTime(data.tt);
+                const rank = data.r;
+                const bestScore = data.bs;
+                const newRecord = data.nr === 1;
+                const isWin = data.w === 1;
+
+                this.state = 'IDLE';
+                this.elements.displayTimer.innerText = playerTimeStr;
+
+                if (rank) document.getElementById('rank-display').innerText = `RANK: #${rank}`;
+                if (bestScore) document.getElementById('best-display').innerText = `BEST: ${bestScore}ms`;
+
+                if (isWin) {
+                    this.elements.displayTimer.style.color = "#22c55e";
+                    const rewards = [
+                        { type: "CASH", val: "₹1,00,000" },
+                        { type: "VOUCHER", val: "₹50,000 Amazon" },
+                        { type: "GIFT", val: "₹25,000 Gift Card" }
+                    ];
+                    const reward = rewards[Math.floor(Math.random() * rewards.length)];
+                    Game.finishLevel(true, "", reward.type, reward.val);
+                } else {
+                    // Handle Loss
+
+                    if (diffMs < Game.bestMiss) Game.bestMiss = diffMs;
+
+                    this.elements.displayTimer.innerHTML = Game.colorizeDigits(targetStr, playerTimeStr);
+
+                    this.elements.diffBadge.style.display = "inline-block";
+                    this.elements.diffBadge.innerText = `OFF BY ${diffMs}ms`;
+
+                    this.elements.timerBox.style.borderColor = "#ef4444";
+                    this.elements.timerBox.classList.add('pulse');
+                    setTimeout(() => this.elements.timerBox.classList.remove('pulse'), 1000);
+
+                    this.elements.btn.innerText = "TRY AGAIN";
+                    this.elements.btn.className = "btn retry";
+                    this.elements.btn.disabled = false;
+
+                    // Specific logic for message if needed?
+                    let msg = "";
+                    if (newRecord) {
+                        msg = `🔥 NEW HIGH SCORE! 🔥<br><b>You jumped to Rank #${rank}!</b>`;
+                        this.elements.diffBadge.classList.add('new-record-anim');
+                        this.elements.diffBadge.innerText = `NEW BEST: ${diffMs}ms!`;
+                    } else if (diffMs < 10) {
+                        msg = `😱 OFF BY A WHISKER!<br><b>Just ${diffMs}ms difference!</b>`;
+                    } else {
+                        msg = `💪 Getting closer!<br><b>Watch the last digit carefully!</b>`;
+                    }
+                    this.elements.status.innerHTML = msg;
+                    this.elements.status.style.color = newRecord ? "#FFD700" : "#ef4444";
+                }
+            }
+        };
+
+        Game.init();
+
+    </script>
+</body>
+
+</html>

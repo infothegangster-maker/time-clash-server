@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Setup Profile - Time Clash</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+        
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #fff;
+            font-family: 'Fredoka One', cursive;
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        h2 { margin-bottom: 30px; text-align: center; }
+
+        input {
+            width: 100%;
+            max-width: 320px;
+            padding: 15px;
+            border-radius: 12px;
+            border: 2px solid #334155;
+            background: #0f172a;
+            color: white;
+            font-size: 1.2rem;
+            text-align: center;
+            font-family: inherit;
+            outline: none;
+            margin-bottom: 20px;
+        }
+
+        input:focus { border-color: #3b82f6; }
+
+        .btn-save {
+            background: #22c55e;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 0 #15803d;
+            cursor: pointer;
+            font-family: inherit;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .btn-save:active { transform: translateY(4px); box-shadow: none; }
+
+        .error { color: #ef4444; font-size: 0.9rem; height: 20px; margin-bottom: 10px; }
+
+    </style>
+</head>
+<body>
+
+    <h2>CHOOSE YOUR NAME</h2>
+
+    <input type="text" id="username-input" placeholder="Enter Username" maxlength="12">
+    <div class="error" id="error-msg"></div>
+
+    <button class="btn-save" onclick="saveProfile()">CONTINUE</button>
+
+    <script>
+        function saveProfile() {
+            const input = document.getElementById('username-input');
+            const error = document.getElementById('error-msg');
+            const name = input.value.trim();
+
+            if (name.length < 3) {
+                error.innerText = "Name too short (min 3 chars)";
+                return;
+            }
+
+            // Save Name
+            localStorage.setItem('tc_username', name);
+            
+            // Go to Home
+            window.location.href = 'home.html';
+        }
+    </script>
+
+</body>
+</html>
