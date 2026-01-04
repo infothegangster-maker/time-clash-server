@@ -154,12 +154,54 @@ try {
     // console.log("   Tip: Add FIREBASE_SERVICE_ACCOUNT env var in Render Dashboard");
 }
 
+// --- RATE LIMITING (SECURITY PHASE 3) ---
+const RATE_LIMITS = {
+    'ig': { max: 10, window: 60 * 1000 },    // 10 Games per minute
+    'st': { max: 5, window: 10 * 1000 },     // 5 Starts per 10 seconds (Prevents rapid retries)
+    'sp': { max: 10, window: 60 * 1000 },    // 10 Stops per minute
+    'default': { max: 20, window: 1000 }     // 20 Packets per second (General DOS)
+};
+
+const requestCounts = new Map(); // Key: socket.id + event
+
+function checkRateLimit(socket, event) {
+    const key = `${socket.id}:${event}`;
+    const limit = RATE_LIMITS[event] || RATE_LIMITS['default'];
+    const now = Date.now();
+
+    if (!requestCounts.has(key)) {
+        requestCounts.set(key, []);
+    }
+
+    const timestamps = requestCounts.get(key);
+
+    // Remove old timestamps outside the window
+    const newTimestamps = timestamps.filter(t => now - t < limit.window);
+
+    if (newTimestamps.length >= limit.max) {
+        return false; // Rate limit exceeded
+    }
+
+    newTimestamps.push(now);
+    requestCounts.set(key, newTimestamps);
+    return true;
+}
+
+// Cleanup Interval (Every 5 mins clear old memory)
+setInterval(() => {
+    requestCounts.clear();
+}, 5 * 60 * 1000);
+
 io.on('connection', (socket) => {
     // console.log('User Connected:', socket.id);
 
     // 1. INIT GAME -> 'ig'
     socket.on('ig', async (data) => {
-        // Refresh Leaderboard Cache (On Demand - Lazy Loading)
+        if (!checkRateLimit(socket, 'ig')) {
+            return socket.emit('to', 'Too many requests. Please wait.'); // 'to' = toast/error
+        }
+
+        // Refresh Leaderboard Cache ...
         await refreshLeaderboardCache();
 
         let userId = data.u || socket.id;
@@ -221,6 +263,7 @@ io.on('connection', (socket) => {
 
     // 2. START CLOUD TIMER -> 'st'
     socket.on('st', async () => {
+        if (!checkRateLimit(socket, 'st')) return;
         const session = sessionStore.get(socket.id);
         if (!session) return;
 
@@ -242,6 +285,7 @@ io.on('connection', (socket) => {
 
     // 3. STOP CLOUD TIMER -> 'sp'
     socket.on('sp', async () => {
+        if (!checkRateLimit(socket, 'sp')) return;
         if (gameIntervals.has(socket.id)) {
             clearInterval(gameIntervals.get(socket.id));
             gameIntervals.delete(socket.id);
