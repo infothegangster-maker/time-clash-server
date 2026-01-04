@@ -123,6 +123,22 @@ async function refreshLeaderboardCache() {
     }
 }
 
+// --- FIREBASE ADMIN SETUP (SECURITY) ---
+const admin = require('firebase-admin');
+let isSecureMode = false;
+
+try {
+    const serviceAccount = require('./serviceAccountKey.json');
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+    isSecureMode = true;
+    console.log("🔒 SECURE MODE: Enabled (Firebase Admin Ready)");
+} catch (e) {
+    console.log("⚠️ INSECURE MODE: serviceAccountKey.json missing or invalid.");
+    console.log("   Detailed Error:", e.message);
+}
+
 io.on('connection', (socket) => {
     // console.log('User Connected:', socket.id);
 
@@ -131,7 +147,22 @@ io.on('connection', (socket) => {
         // Refresh Leaderboard Cache (On Demand - Lazy Loading)
         await refreshLeaderboardCache();
 
-        const userId = data.u || socket.id;
+        let userId = data.u || socket.id;
+        let isVerified = false;
+
+        // --- SECURITY CHECK ---
+        if (isSecureMode && data.t) {
+            try {
+                const decodedToken = await admin.auth().verifyIdToken(data.t);
+                userId = decodedToken.uid; // USE REAL UID from Google
+                isVerified = true;
+                // console.log(`✅ Verified User: ${userId}`);
+            } catch (err) {
+                console.error("❌ Token Verification Failed:", err.message);
+                // For now, valid tokens are preferred, but we verify anyway
+            }
+        }
+
         const targetTime = Math.floor(Math.random() * 9000) + 1000;
         const currentTournamentId = getTournamentKey();
 
@@ -157,7 +188,8 @@ io.on('connection', (socket) => {
             startTime: 0,
             status: 'ready',
             bestScore: bestScore,
-            tournamentId: currentTournamentId // Lock user to this tournament ID
+            tournamentId: currentTournamentId, // Lock user to this tournament ID
+            isVerified: isVerified // Mark session as verified
         };
         sessionStore.set(socket.id, session);
 

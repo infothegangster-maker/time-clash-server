@@ -1,4 +1,4 @@
-node_modules
+node_modules/
 .env
-.DS_Store
-
+serviceAccountKey.json
+SERVICE_ACCOUNT_GUIDE.md
