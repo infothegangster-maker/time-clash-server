@@ -124,19 +124,34 @@ async function refreshLeaderboardCache() {
 }
 
 // --- FIREBASE ADMIN SETUP (SECURITY) ---
+// --- FIREBASE ADMIN SETUP (SECURITY) ---
 const admin = require('firebase-admin');
 let isSecureMode = false;
 
 try {
-    const serviceAccount = require('./serviceAccountKey.json');
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-    });
-    isSecureMode = true;
-    console.log("🔒 SECURE MODE: Enabled (Firebase Admin Ready)");
+    let serviceAccount;
+
+    // 1. Try Environment Variable (For Production/Render)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        console.log("🔑 reading service account from Environment Variable...");
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    }
+    // 2. Try Local File (For Local Dev)
+    else {
+        serviceAccount = require('./serviceAccountKey.json');
+    }
+
+    if (serviceAccount) {
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+        isSecureMode = true;
+        console.log("🔒 SECURE MODE: Enabled (Firebase Admin Ready)");
+    }
 } catch (e) {
-    console.log("⚠️ INSECURE MODE: serviceAccountKey.json missing or invalid.");
+    console.log("⚠️ INSECURE MODE: Service Account missing or invalid.");
     console.log("   Detailed Error:", e.message);
+    // console.log("   Tip: Add FIREBASE_SERVICE_ACCOUNT env var in Render Dashboard");
 }
 
 io.on('connection', (socket) => {
