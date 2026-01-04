@@ -158,7 +158,7 @@ try {
 const RATE_LIMITS = {
     'ig': { max: 10, window: 60 * 1000 },    // 10 Games per minute
     'st': { max: 5, window: 10 * 1000 },     // 5 Starts per 10 seconds (Prevents rapid retries)
-    'sp': { max: 10, window: 60 * 1000 },    // 10 Stops per minute
+    'sp': { max: 10, window: 20 * 1000 },    // 10 Stops per 20 seconds
     'default': { max: 20, window: 1000 }     // 20 Packets per second (General DOS)
 };
 
