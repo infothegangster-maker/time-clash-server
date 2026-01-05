@@ -220,21 +220,26 @@ io.on('connection', (socket) => {
             }
         }
 
+        // Mode: 'p' = Practice, 't' = Tournament (Default)
+        const mode = data.m === 'p' ? 'p' : 't';
+
         const targetTime = Math.floor(Math.random() * 9000) + 1000;
         const currentTournamentId = getTournamentKey();
 
-        // Fetch Best Score & Rank for CURRENT Tournament
+        // Fetch Best Score & Rank for CURRENT Tournament (ONLY IF TOURNAMENT MODE)
         let bestScore = null;
         let currentRank = null;
 
-        try {
-            const [score, rank] = await Promise.all([
-                redis.zscore(currentTournamentId, userId),
-                redis.zrank(currentTournamentId, userId)
-            ]);
-            bestScore = score;
-            currentRank = rank;
-        } catch (e) { console.error(e); }
+        if (mode === 't') {
+            try {
+                const [score, rank] = await Promise.all([
+                    redis.zscore(currentTournamentId, userId),
+                    redis.zrank(currentTournamentId, userId)
+                ]);
+                bestScore = score;
+                currentRank = rank;
+            } catch (e) { console.error(e); }
+        }
 
         bestScore = bestScore ? parseFloat(bestScore) : null;
 
@@ -246,7 +251,8 @@ io.on('connection', (socket) => {
             status: 'ready',
             bestScore: bestScore,
             tournamentId: currentTournamentId, // Lock user to this tournament ID
-            isVerified: isVerified // Mark session as verified
+            isVerified: isVerified, // Mark session as verified
+            mode: mode // STORE MODE
         };
         sessionStore.set(socket.id, session);
 
@@ -299,6 +305,9 @@ io.on('connection', (socket) => {
             return;
         }
 
+        if (session.status !== 'running') return; // Prevent double submission
+        session.status = 'finished';
+
         const serverDuration = stopTime - session.startTime;
         const target = session.targetTime;
 
@@ -310,33 +319,34 @@ io.on('connection', (socket) => {
         let newRecord = false;
         let rank = null;
         let bestScore = session.bestScore;
-
-        // Submit to the tournament that is CURRENTLY active
         const currentTournamentId = getTournamentKey(session.startTime); // Use START time to handle hour boundary items
 
-        // ONLY Update Redis if High Score (Lower Diff is Better)
-        if (bestScore === null || diff < bestScore) {
-            newRecord = true;
-            bestScore = diff;
-            session.bestScore = bestScore;
+        // ONLY UPDATE REDIS IF IN TOURNAMENT MODE
+        if (session.mode === 't') {
+            // ONLY Update Redis if High Score (Lower Diff is Better)
+            if (bestScore === null || diff < bestScore) {
+                newRecord = true;
+                bestScore = diff;
+                session.bestScore = bestScore;
 
-            try {
-                // UPDATE REDIS
-                // Uses 'LT' (Less Than) option if available in newer Redis, 
-                // but our manual check above covers it. 
-                // We overwrite because we already verified it's better.
-                await redis.zadd(currentTournamentId, diff, session.userId);
+                try {
+                    // UPDATE REDIS
+                    // Uses 'LT' (Less Than) option if available in newer Redis, 
+                    // but our manual check above covers it. 
+                    // We overwrite because we already verified it's better.
+                    await redis.zadd(currentTournamentId, diff, session.userId);
 
-                // Get Updated Rank
-                const rankIndex = await redis.zrank(currentTournamentId, session.userId);
-                rank = rankIndex !== null ? rankIndex + 1 : null;
-            } catch (e) { console.error(e); }
-        } else {
-            // Fetch current rank anyway (even if score didn't improve)
-            try {
-                const rankIndex = await redis.zrank(currentTournamentId, session.userId);
-                rank = rankIndex !== null ? rankIndex + 1 : null;
-            } catch (e) { }
+                    // Get Updated Rank
+                    const rankIndex = await redis.zrank(currentTournamentId, session.userId);
+                    rank = rankIndex !== null ? rankIndex + 1 : null;
+                } catch (e) { console.error(e); }
+            } else {
+                // Fetch current rank anyway (even if score didn't improve)
+                try {
+                    const rankIndex = await redis.zrank(currentTournamentId, session.userId);
+                    rank = rankIndex !== null ? rankIndex + 1 : null;
+                } catch (e) { }
+            }
         }
 
         // Use Cached Leaderboard
