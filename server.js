@@ -121,7 +121,19 @@ fastify.get('/api/admin/firebase-active-users', async (req, reply) => {
 // Admin: Get Current Tournament Details
 fastify.get('/api/admin/current-tournament', async (req, reply) => {
     try {
-        const currentTournamentId = getTournamentKey();
+        // Use currentTournamentKey if set, otherwise return null (no active tournament)
+        const currentTournamentId = currentTournamentKey || null;
+        
+        if (!currentTournamentId) {
+            return {
+                tournamentId: null,
+                participantCount: 0,
+                participants: [],
+                timeLeft: 0,
+                playTimeLeft: 0,
+                hasActiveTournament: false
+            };
+        }
         const allParticipants = await redis.zrange(currentTournamentId, 0, -1, 'WITHSCORES');
         
         const participants = [];
@@ -706,7 +718,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // --- GLOBAL TOURNAMENT MANAGEMENT (Outside socket handler) ---
-let currentTournamentKey = getTournamentKey();
+let currentTournamentKey = null; // Will be set only when auto tournaments are enabled or manual/scheduled tournament is created
 let autoTournamentEnabled = true; // Auto tournament enabled by default
 let tournamentCheckInterval = null;
 
@@ -866,7 +878,34 @@ io.on('connection', (socket) => {
         // Mode: 'p' = Practice, 't' = Tournament (Default)
         const mode = data.m === 'p' ? 'p' : 't';
 
-        const currentTournamentId = getTournamentKey();
+        // Get current tournament ID - use currentTournamentKey if set, otherwise return error for tournament mode
+        let currentTournamentId;
+        if (mode === 't') {
+            // Tournament mode - check if there's an active tournament
+            if (!currentTournamentKey) {
+                // No active tournament - check if auto tournaments are enabled
+                if (autoTournamentEnabled) {
+                    // Auto tournaments enabled - create tournament key
+                    currentTournamentKey = getTournamentKey();
+                    currentTournamentId = currentTournamentKey;
+                } else {
+                    // Auto tournaments disabled and no manual/scheduled tournament
+                    return socket.emit('grd', {
+                        t: 0,
+                        b: -1,
+                        r: -1,
+                        tl: 0,
+                        tid: null,
+                        noTournament: true
+                    });
+                }
+            } else {
+                currentTournamentId = currentTournamentKey;
+            }
+        } else {
+            // Practice mode - use any tournament key for practice
+            currentTournamentId = getTournamentKey();
+        }
         
         // Get target time for tournament - SAME NUMBER FOR ALL USERS IN ONE TOURNAMENT
         let targetTime;

@@ -606,6 +606,13 @@
             });
 
             socket.on('grd', (data) => {
+                // Check if no tournament exists
+                if (data.noTournament || !data.tid) {
+                    toast.style.display = 'none';
+                    showNoTournamentMessage();
+                    return;
+                }
+                
                 // Hacking.target = data.t / 1000; // Not used here
                 if (data.tl && data.tl > 0) {
                     // Play time - show Enter button and timer
@@ -760,6 +767,8 @@
 
         // Call on Load
         fetchTournamentData();
+        // Refresh tournament data every 5 seconds to check for scheduled tournaments
+        setInterval(fetchTournamentData, 5000);
 
         // Start connection
         // startCountdown(); // Removed dummy
