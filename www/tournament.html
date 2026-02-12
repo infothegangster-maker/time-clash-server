@@ -609,9 +609,18 @@
                 // Check if no tournament exists
                 if (data.noTournament || !data.tid) {
                     toast.style.display = 'none';
-                    showNoTournamentMessage();
+                    // Check if there's a scheduled tournament - if yes, show countdown, else show "No Tournament"
+                    if (nextScheduledTournament) {
+                        startScheduledCountdown(nextScheduledTournament);
+                    } else {
+                        showNoTournamentMessage();
+                    }
                     return;
                 }
+                
+                // Mark that we have an active tournament
+                hasActiveTournament = true;
+                stopScheduledCountdown();
                 
                 // Hacking.target = data.t / 1000; // Not used here
                 if (data.tl && data.tl > 0) {
@@ -668,6 +677,7 @@
 
         function startLeaderboardCountdown() {
             if (tournamentInterval) clearInterval(tournamentInterval);
+            stopScheduledCountdown(); // Stop scheduled countdown if running
 
             const display = document.getElementById('countdown');
             const LEADERBOARD_TIME_MS = 3 * 60 * 1000; // 3 minutes
@@ -684,12 +694,20 @@
 
             const updateDisplay = () => {
                 if (secondsRemaining <= 0) {
-                    // Time's up - refresh page for next tournament
-                    display.innerText = "Next tournament starting...";
+                    // Time's up - check if there's a scheduled tournament or refresh
                     clearInterval(tournamentInterval);
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 500);
+                    tournamentInterval = null;
+                    
+                    // Check for scheduled tournament after leaderboard ends
+                    if (nextScheduledTournament) {
+                        startScheduledCountdown(nextScheduledTournament);
+                    } else {
+                        // No scheduled tournament - show "No Tournament" and refresh
+                        showNoTournamentMessage();
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 2000);
+                    }
                     return;
                 }
 
