@@ -1,12 +1,4 @@
 node_modules/
 .env
-.DS_Store
-*.keystore
-*.jks
-*.aab
-*.apk
-android/
-ios/
-dist/
-build/
-
+serviceAccountKey.json
+SERVICE_ACCOUNT_GUIDE.md
