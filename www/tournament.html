@@ -638,17 +638,8 @@
                     TrysManager.renderActionKey(false);
                     toast.style.display = 'none';
 
-                    // Show "Tournament Ended" message
-                    const display = document.getElementById('countdown');
-                    if (display) {
-                        display.innerHTML = `
-                            <div style="text-align: center; padding: 20px;">
-                                <div style="font-size: 1.5rem; color: #fbbf24; margin-bottom: 10px;">🏆 Tournament Ended</div>
-                                <div style="font-size: 1rem; color: #94a3b8;">Calculating Winners...</div>
-                                <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">Next round starts soon</div>
-                            </div>
-                        `;
-                    }
+                    // Start leaderboard countdown
+                    startLeaderboardCountdown(data.ltl || 0);
                 } else {
                     // PLAYING PHASE (Default)
                     // Show Enter Button
@@ -700,6 +691,54 @@
 
                 display.innerText = `Ends in: ${timeStr}`;
                 if (nextTourDisplay) nextTourDisplay.innerText = timeStr;
+
+                secondsRemaining--;
+            };
+
+            updateDisplay();
+            tournamentInterval = setInterval(updateDisplay, 1000);
+        }
+
+        // Leaderboard countdown - shows time until next tournament
+        function startLeaderboardCountdown(msLeft) {
+            if (tournamentInterval) clearInterval(tournamentInterval);
+            stopScheduledCountdown();
+
+            const display = document.getElementById('countdown');
+            if (!display) return;
+
+            // If no time left, go to no tournament
+            if (!msLeft || msLeft <= 0) {
+                showNoTournamentMessage();
+                return;
+            }
+
+            let secondsRemaining = Math.floor(msLeft / 1000);
+
+            const updateDisplay = () => {
+                if (secondsRemaining <= 0) {
+                    // Leaderboard time over - reload to check for next tournament
+                    display.innerHTML = `
+                        <div style="text-align: center; padding: 20px;">
+                            <div style="font-size: 1.2rem; color: #60a5fa;">⏳ Loading Next Tournament...</div>
+                        </div>
+                    `;
+                    setTimeout(() => window.location.reload(), 2000);
+                    return;
+                }
+
+                const m = Math.floor(secondsRemaining / 60);
+                const s = secondsRemaining % 60;
+
+                display.innerHTML = `
+                    <div style="text-align: center; padding: 20px;">
+                        <div style="font-size: 1.5rem; color: #fbbf24; margin-bottom: 10px;">🏆 Tournament Ended</div>
+                        <div style="font-size: 2rem; color: #FFD700; font-weight: 700; font-family: 'Teko', sans-serif;">
+                            ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}
+                        </div>
+                        <div style="font-size: 0.85rem; color: #94a3b8; margin-top: 5px;">Next round starts in</div>
+                    </div>
+                `;
 
                 secondsRemaining--;
             };

@@ -677,6 +677,26 @@ async function getTournamentPhase(tournamentId = null) {
     }
 }
 
+// Helper: Get Leaderboard Time Left (ms until next tournament starts)
+async function getLeaderboardTimeLeft(tournamentId = null) {
+    if (!tournamentId) return 0;
+
+    const now = Date.now();
+
+    // Check custom timing
+    const custom = await getCustomTournamentTiming(tournamentId);
+    if (custom) {
+        const totalDuration = custom.playTime + (custom.leaderboardTime || WINNER_TIME_MS);
+        const elapsed = now - custom.startTime;
+        return Math.max(0, totalDuration - elapsed);
+    }
+
+    // Default 15-min interval
+    const intervalStart = Math.floor(now / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS;
+    const elapsed = now - intervalStart;
+    return Math.max(0, TOURNAMENT_DURATION_MS - elapsed);
+}
+
 // --- IN-MEMORY STORES (For Extreme Performance) ---
 const gameIntervals = new Map();
 const sessionStore = new Map(); // Replaces Redis for hot session data
@@ -1061,9 +1081,10 @@ io.on('connection', (socket) => {
         console.log(`✅ Active User Tracked: ${userId} (${username}) - Total Active: ${activeUsers.size}`);
 
         // Send Game Ready Data (grd)
-        // t: target, b: best, r: rank, tl: timeLeft (ms), tid: tournamentId, ph: phase
+        // t: target, b: best, r: rank, tl: timeLeft (ms), tid: tournamentId, ph: phase, ltl: leaderboardTimeLeft
         const timeLeft = await getTournamentTimeLeft(currentTournamentId);
         const phase = await getTournamentPhase(currentTournamentId);
+        const lbTimeLeft = await getLeaderboardTimeLeft(currentTournamentId);
 
         socket.emit('grd', {
             t: targetTime,
@@ -1071,7 +1092,8 @@ io.on('connection', (socket) => {
             r: currentRank !== null ? currentRank + 1 : -1,
             tl: timeLeft,
             tid: currentTournamentId,
-            ph: phase
+            ph: phase,
+            ltl: lbTimeLeft
         });
     });
 
