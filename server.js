@@ -149,17 +149,32 @@ fastify.get('/api/admin/current-tournament', async (req, reply) => {
             }
         }
 
-        // Get user emails from active users or session store
-        const participantsWithDetails = participants.map(p => {
+        // Get user emails from active users, session store, or Redis
+        const participantsWithDetails = await Promise.all(participants.map(async (p) => {
             const activeUser = Array.from(activeUsers.values()).find(u => u.userId === p.userId);
             const session = Array.from(sessionStore.values()).find(s => s.userId === p.userId);
+
+            let email = activeUser?.email || session?.email || null;
+            let username = activeUser?.username || session?.username || null;
+
+            // Fallback: Check Redis for persisted metadata
+            if ((!email || !username || username === 'Guest') && !p.userId.startsWith('guest_')) {
+                try {
+                    const meta = await redis.hgetall(`user_meta:${p.userId}`);
+                    if (meta) {
+                        email = email || meta.email || 'N/A';
+                        username = username || meta.username || 'Guest';
+                    }
+                } catch (e) { /* ignore */ }
+            }
+
             return {
                 userId: p.userId,
                 score: p.score,
-                email: activeUser?.email || session?.email || 'N/A',
-                username: activeUser?.username || session?.username || 'Guest'
+                email: email || 'N/A',
+                username: username || 'Guest'
             };
-        });
+        }));
 
         // Get time left with custom timing support
         const timeLeft = await getTournamentTimeLeft(currentTournamentId);
@@ -916,7 +931,7 @@ async function endTournament(oldKey) {
         // 1. Get Top 3 Winners
         const top3 = await redis.zrange(oldKey, 0, 2, 'WITHSCORES');
 
-        // Format Winners
+        // Format Winners with display names
         const winners = [];
         if (Array.isArray(top3)) {
             // Handle Redis Format differences (Array vs Object)
@@ -929,6 +944,26 @@ async function endTournament(oldKey) {
                     winners.push({ u: top3[i], s: top3[i + 1] });
                 }
             }
+        }
+
+        // Resolve display names from Redis metadata
+        for (let w of winners) {
+            try {
+                const meta = await redis.hgetall(`user_meta:${w.u}`);
+                if (meta && meta.username) {
+                    w.n = meta.username; // Add display name
+                    w.e = meta.email || '';
+                }
+            } catch (e) { /* ignore */ }
+            // Fallback: check in-memory activeUsers
+            if (!w.n) {
+                const activeUser = Array.from(activeUsers.values()).find(u => u.userId === w.u);
+                if (activeUser) {
+                    w.n = activeUser.username;
+                    w.e = activeUser.email || '';
+                }
+            }
+            if (!w.n) w.n = w.u; // Last resort: use userId
         }
 
         // 2. Archive to History
@@ -1087,7 +1122,18 @@ io.on('connection', (socket) => {
             socketId: socket.id
         });
 
-        console.log(`✅ Active User Tracked: ${userId} (${username}) - Total Active: ${activeUsers.size}`);
+        // PERSIST user metadata in Redis (survives disconnect + server restart)
+        try {
+            if (userId && !userId.startsWith('guest_')) {
+                await redis.hset(`user_meta:${userId}`, {
+                    email: userEmail || '',
+                    username: username || '',
+                    lastSeen: Date.now().toString()
+                });
+            }
+        } catch (e) {
+            console.error('❌ Error saving user metadata:', e);
+        }
 
         // Send Game Ready Data (grd)
         // t: target, b: best, r: rank, tl: timeLeft (ms), tid: tournamentId, ph: phase, ltl: leaderboardTimeLeft
