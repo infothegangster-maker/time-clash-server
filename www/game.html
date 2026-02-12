@@ -826,7 +826,16 @@
                     setTimeout(() => Hacking.hideToast(), 1000);
 
                     const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
-                    socket.emit('ig', { u: savedId });
+                    const email = localStorage.getItem('tc_email') || null;
+                    const username = localStorage.getItem('tc_username') || 'Guest';
+                    const idToken = localStorage.getItem('tc_id_token') || null;
+                    
+                    socket.emit('ig', { 
+                        u: savedId,
+                        e: email,
+                        n: username,
+                        t: idToken
+                    });
                 });
 
                 socket.on('connect_error', (err) => {
@@ -925,7 +934,16 @@
                 if (!TrysManager.checkTrys()) return;
 
                 const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
-                socket.emit('ig', { u: savedId });
+                const email = localStorage.getItem('tc_email') || null;
+                const username = localStorage.getItem('tc_username') || 'Guest';
+                const idToken = localStorage.getItem('tc_id_token') || null;
+                
+                socket.emit('ig', { 
+                    u: savedId,
+                    e: email,
+                    n: username,
+                    t: idToken
+                });
 
                 this.startHack();
                 Hacking.resetView();

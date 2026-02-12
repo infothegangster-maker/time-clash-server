@@ -35,6 +35,8 @@ fastify.get('/api/admin/firebase-active-users', async (req, reply) => {
         // Get active user IDs from socket connections
         const activeUserIds = Array.from(activeUsers.values()).map(u => u.userId);
         
+        console.log(`📊 Admin Request: Active Users Count = ${activeUsers.size}, User IDs = ${activeUserIds.length}`);
+        
         if (activeUserIds.length === 0) {
             return { count: 0, users: [], message: "No active users currently" };
         }
@@ -367,6 +369,8 @@ io.on('connection', (socket) => {
             lastActivity: Date.now(),
             socketId: socket.id
         });
+        
+        console.log(`✅ Active User Tracked: ${userId} (${username}) - Total Active: ${activeUsers.size}`);
 
         // Send Game Ready Data (grd)
         // t: target, b: best, r: rank, tl: timeLeft (ms), tid: tournamentId
@@ -489,6 +493,9 @@ io.on('connection', (socket) => {
             gameIntervals.delete(socket.id);
         }
         sessionStore.delete(socket.id);
-        activeUsers.delete(socket.id); // Remove from active users
+        const removed = activeUsers.delete(socket.id); // Remove from active users
+        if (removed) {
+            console.log(`❌ Active User Removed: ${socket.id} - Total Active: ${activeUsers.size}`);
+        }
     });
 });
