@@ -58,25 +58,34 @@ function formatTime(ms) {
 }
 
 // --- TOURNAMENT HELPERS ---
+// Tournament runs every 15 minutes: 12 minutes play + 3 minutes winner/leaderboard
+const TOURNAMENT_DURATION_MS = 15 * 60 * 1000; // 15 minutes total
+const PLAY_TIME_MS = 12 * 60 * 1000; // 12 minutes play time
+const LEADERBOARD_TIME_MS = 3 * 60 * 1000; // 3 minutes winner/leaderboard time
+
 function getTournamentKey(timestamp = Date.now()) {
-    const date = new Date(timestamp);
-    // Format: tournament_YYYY_MM_DD_HH (e.g., tournament_2024_12_29_14)
-    // Uses UTC to ensure global sync
-    const key = `tournament_${date.getUTCFullYear()}_${String(date.getUTCMonth() + 1).padStart(2, '0')}_${String(date.getUTCDate()).padStart(2, '0')}_${String(date.getUTCHours()).padStart(2, '0')}`;
+    // Calculate which 15-minute interval we're in
+    const intervalStart = Math.floor(timestamp / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS;
+    const date = new Date(intervalStart);
+    // Format: tournament_YYYY_MM_DD_HH_MM (includes minute for 15-min intervals)
+    const key = `tournament_${date.getUTCFullYear()}_${String(date.getUTCMonth() + 1).padStart(2, '0')}_${String(date.getUTCDate()).padStart(2, '0')}_${String(date.getUTCHours()).padStart(2, '0')}_${String(date.getUTCMinutes()).padStart(2, '0')}`;
     return key;
 }
 
 function getTournamentTimeLeft() {
-    const now = new Date();
-    const minutes = now.getUTCMinutes();
-    const seconds = now.getUTCSeconds();
-
-    // Total seconds in an hour
-    const totalSecondsInHour = 3600;
-    const currentSeconds = (minutes * 60) + seconds;
-
-    const remainingSeconds = totalSecondsInHour - currentSeconds;
-    return remainingSeconds * 1000; // Return in ms
+    const now = Date.now();
+    // Find the start of current 15-minute interval
+    const intervalStart = Math.floor(now / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS;
+    const elapsed = now - intervalStart;
+    
+    // If we're in winner/leaderboard time (last 3 minutes), return 0
+    if (elapsed >= PLAY_TIME_MS) {
+        return 0; // Tournament ended, winner/leaderboard time
+    }
+    
+    // Return remaining play time
+    const remaining = PLAY_TIME_MS - elapsed;
+    return remaining; // Return in ms
 }
 
 // --- IN-MEMORY STORES (For Extreme Performance) ---
@@ -95,7 +104,7 @@ async function refreshLeaderboardCache() {
     if (now - lastLeaderboardUpdate < 10000 && currentCachedTournamentId === currentTournamentId) return;
 
     try {
-        // Fetch top 3 from the CURRENT hourly tournament
+        // Fetch top 3 from the CURRENT 15-minute tournament
         const top3 = await redis.zrange(currentTournamentId, 0, 2, 'WITHSCORES');
 
         const formattedTop3 = [];
@@ -319,7 +328,7 @@ io.on('connection', (socket) => {
         let newRecord = false;
         let rank = null;
         let bestScore = session.bestScore;
-        const currentTournamentId = getTournamentKey(session.startTime); // Use START time to handle hour boundary items
+        const currentTournamentId = getTournamentKey(session.startTime); // Use START time to handle tournament boundary items
 
         // ONLY UPDATE REDIS IF IN TOURNAMENT MODE
         if (session.mode === 't') {
