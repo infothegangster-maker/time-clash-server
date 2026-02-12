@@ -2,10 +2,10 @@
   "name": "time-clash-backend",
   "version": "1.0.0",
   "description": "Production Game Server",
-  "main": "backend/server.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node backend/server.js",
-    "dev": "nodemon backend/server.js",
+    "start": "node server.js",
+    "dev": "nodemon server.js",
     "postinstall": "patch-package"
   },
   "dependencies": {
