@@ -882,11 +882,12 @@
 
         // Call on Load
         fetchTournamentData();
-        // Refresh tournament data every 5 seconds to check for scheduled tournaments
-        // This ensures scheduled countdown stays updated even after socket connects
+        // Refresh tournament data every 3 seconds to check for scheduled tournaments and active tournaments
+        // This ensures scheduled countdown stays updated and tournament status is checked frequently
+        // Reduced interval to 3 seconds for better responsiveness when tournament starts
         setInterval(() => {
             fetchTournamentData();
-        }, 5000);
+        }, 3000);
 
         // Start connection
         // startCountdown(); // Removed dummy
