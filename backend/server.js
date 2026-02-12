@@ -202,66 +202,69 @@ setInterval(() => {
     requestCounts.clear();
 }, 5 * 60 * 1000);
 
+// --- GLOBAL TOURNAMENT MANAGEMENT (Outside socket handler) ---
+let currentTournamentKey = getTournamentKey();
+
+// Tournament End Detection - Check Every 10 Seconds
+setInterval(() => {
+    const newKey = getTournamentKey();
+    if (newKey !== currentTournamentKey) {
+        console.log(`🔄 Tournament Changed: ${currentTournamentKey} -> ${newKey}`);
+        endTournament(currentTournamentKey);
+        currentTournamentKey = newKey;
+    }
+}, 10000);
+
+// Global Tournament End Function
+async function endTournament(oldKey) {
+    console.log(`🏁 Ending Tournament: ${oldKey}`);
+    try {
+        // 1. Get Top 3 Winners
+        const top3 = await redis.zrange(oldKey, 0, 2, 'WITHSCORES');
+
+        // Format Winners
+        const winners = [];
+        if (Array.isArray(top3)) {
+            // Handle Redis Format differences (Array vs Object)
+            if (top3.length > 0 && typeof top3[0] === 'object') {
+                // Upstash/Object
+                top3.forEach(x => winners.push({ u: x.member, s: x.score }));
+            } else {
+                // Flat Array
+                for (let i = 0; i < top3.length; i += 2) {
+                    winners.push({ u: top3[i], s: top3[i + 1] });
+                }
+            }
+        }
+
+        // 2. Archive to History
+        const archive = {
+            id: oldKey,
+            ts: Date.now(),
+            winners: winners
+        };
+
+        // Push to History List (Keep last 50 for admin panel)
+        await redis.lpush('tournament_history', JSON.stringify(archive));
+        await redis.ltrim('tournament_history', 0, 49); // Keep last 50 tournaments
+
+        // 3. Broadcast End Event
+        io.emit('tou_end', {
+            id: oldKey,
+            winners: winners
+        });
+
+        console.log(`✅ Tournament Archived: ${oldKey} with ${winners.length} winners`);
+
+    } catch (e) {
+        console.error("❌ Error Ending Tournament:", e);
+    }
+}
+
 io.on('connection', (socket) => {
     // console.log('User Connected:', socket.id);
 
     // 1. INIT GAME -> 'ig'
-    // --- TOURNAMENT MANAGEMENT ---
-    let currentTournamentKey = getTournamentKey();
-
-    // Check for Tournament End Every 10 Seconds
-    setInterval(() => {
-        const newKey = getTournamentKey();
-        if (newKey !== currentTournamentKey) {
-            endTournament(currentTournamentKey);
-            currentTournamentKey = newKey;
-        }
-    }, 10000);
-
-    async function endTournament(oldKey) {
-        console.log(`🏁 Ending Tournament: ${oldKey}`);
-        try {
-            // 1. Get Top 3 Winners
-            const top3 = await redis.zrange(oldKey, 0, 2, 'WITHSCORES');
-
-            // Format Winners
-            const winners = [];
-            if (Array.isArray(top3)) {
-                // Handle Redis Format differences (Array vs Object)
-                if (top3.length > 0 && typeof top3[0] === 'object') {
-                    // Upstash/Object
-                    top3.forEach(x => winners.push({ u: x.member, s: x.score }));
-                } else {
-                    // Flat Array
-                    for (let i = 0; i < top3.length; i += 2) {
-                        winners.push({ u: top3[i], s: top3[i + 1] });
-                    }
-                }
-            }
-
-            // 2. Archive to History
-            const archive = {
-                id: oldKey,
-                ts: Date.now(),
-                winners: winners
-            };
-
-            // Push to History List (Keep last 10)
-            await redis.lpush('tournament_history', JSON.stringify(archive));
-            await redis.ltrim('tournament_history', 0, 9);
-
-            // 3. Broadcast End Event
-            io.emit('tou_end', {
-                id: oldKey,
-                winners: winners
-            });
-
-            console.log(`✅ Tournament Archived & Broadcasted`);
-
-        } catch (e) {
-            console.error("Error Ending Tournament:", e);
-        }
-    }
 
     // 4. API: Get Tournament Data (History + Status)
     // Used by Tournament Page
@@ -347,11 +350,27 @@ io.on('connection', (socket) => {
     fastify.get('/api/admin/tournament-history', async (req, reply) => {
         try {
             const historyRaw = await redis.lrange('tournament_history', 0, 49);
-            const history = historyRaw.map(x => JSON.parse(x));
+            
+            if (!historyRaw || historyRaw.length === 0) {
+                return { history: [] };
+            }
+            
+            const history = historyRaw.map(x => {
+                try {
+                    return JSON.parse(x);
+                } catch (e) {
+                    console.error("Error parsing tournament history:", e);
+                    return null;
+                }
+            }).filter(x => x !== null);
             
             // Get full participant list for each tournament
             const historyWithDetails = await Promise.all(history.map(async (tournament) => {
                 try {
+                    if (!tournament.id) {
+                        return { ...tournament, participantCount: 0, allParticipants: [] };
+                    }
+                    
                     const allParticipants = await redis.zrange(tournament.id, 0, -1, 'WITHSCORES');
                     const participants = [];
                     if (Array.isArray(allParticipants)) {
@@ -361,7 +380,9 @@ io.on('connection', (socket) => {
                             });
                         } else {
                             for (let i = 0; i < allParticipants.length; i += 2) {
-                                participants.push({ userId: allParticipants[i], score: allParticipants[i + 1] });
+                                if (allParticipants[i] && allParticipants[i + 1] !== undefined) {
+                                    participants.push({ userId: allParticipants[i], score: allParticipants[i + 1] });
+                                }
                             }
                         }
                     }
@@ -371,13 +392,16 @@ io.on('connection', (socket) => {
                         allParticipants: participants.sort((a, b) => a.score - b.score)
                     };
                 } catch (e) {
+                    console.error(`Error getting participants for tournament ${tournament.id}:`, e);
                     return { ...tournament, participantCount: 0, allParticipants: [] };
                 }
             }));
 
+            console.log(`📜 Returning ${historyWithDetails.length} tournaments in history`);
             return { history: historyWithDetails };
         } catch (e) {
-            return { error: e.message };
+            console.error("❌ Error fetching tournament history:", e);
+            return { error: e.message, history: [] };
         }
     });
 

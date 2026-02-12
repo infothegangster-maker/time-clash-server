@@ -425,6 +425,11 @@
         const WORKER_URL = "https://timeclash.raj829266.workers.dev";
         const BACKEND_URL = "https://time-clash-server.onrender.com";
         const SERVER_URL = WORKER_URL; // Use Cloudflare Worker
+        
+        // Log which server is being used
+        console.log("🔗 Admin Panel Server URL:", SERVER_URL);
+        console.log("📡 Using Cloudflare Worker:", SERVER_URL === WORKER_URL);
+        
         let autoRefreshInterval = null;
         let allUsersData = [];
         let activeUsersData = [];
@@ -456,7 +461,9 @@
         // Load Active Users from Firebase
         async function loadActiveUsers() {
             try {
-                const res = await fetch(`${SERVER_URL}/api/admin/firebase-active-users`);
+                const url = `${SERVER_URL}/api/admin/firebase-active-users`;
+                console.log("📡 Fetching active users from:", url);
+                const res = await fetch(url);
                 const data = await res.json();
                 
                 if (data.error) {
@@ -495,7 +502,9 @@
         // Load Current Tournament
         async function loadCurrentTournament() {
             try {
-                const res = await fetch(`${SERVER_URL}/api/admin/current-tournament`);
+                const url = `${SERVER_URL}/api/admin/current-tournament`;
+                console.log("📡 Fetching current tournament from:", url);
+                const res = await fetch(url);
                 const data = await res.json();
                 
                 if (data.error) {
@@ -545,7 +554,9 @@
         // Load Tournament History
         async function loadTournamentHistory() {
             try {
-                const res = await fetch(`${SERVER_URL}/api/admin/tournament-history`);
+                const url = `${SERVER_URL}/api/admin/tournament-history`;
+                console.log("📡 Fetching tournament history from:", url);
+                const res = await fetch(url);
                 const data = await res.json();
                 
                 if (data.error) {
@@ -588,7 +599,9 @@
         // Load System Stats
         async function loadSystemStats() {
             try {
-                const res = await fetch(`${SERVER_URL}/api/admin/system-stats`);
+                const url = `${SERVER_URL}/api/admin/system-stats`;
+                console.log("📡 Fetching system stats from:", url);
+                const res = await fetch(url);
                 const data = await res.json();
                 
                 if (data.error) {
@@ -625,13 +638,27 @@
         // Load All Users from Firebase
         async function loadAllUsers() {
             try {
-                const res = await fetch(`${SERVER_URL}/api/admin/firebase-users`);
+                const url = `${SERVER_URL}/api/admin/firebase-users`;
+                console.log("📡 Fetching all Firebase users from:", url);
+                const res = await fetch(url);
                 const data = await res.json();
                 
                 if (data.error) {
-                    const errorMsg = data.error + (data.isSecureMode !== undefined ? ` (Secure Mode: ${data.isSecureMode})` : '');
+                    let errorMsg = data.error;
+                    let helpText = '';
+                    
+                    if (data.error === 'Not Found') {
+                        helpText = 'Worker endpoint not found. Make sure worker is deployed correctly.';
+                    } else if (data.error.includes('FIREBASE_SERVICE_ACCOUNT')) {
+                        helpText = 'Make sure FIREBASE_SERVICE_ACCOUNT is set in Cloudflare Worker Secrets (not Environment Variables).';
+                    } else if (data.details) {
+                        helpText = data.details;
+                    } else {
+                        helpText = 'Check Cloudflare Worker logs and environment variables.';
+                    }
+                    
                     document.getElementById('all-users-body').innerHTML = 
-                        `<tr><td colspan="6" class="error">Error: ${errorMsg}<br><small>Make sure FIREBASE_SERVICE_ACCOUNT is set in Render environment variables</small></td></tr>`;
+                        `<tr><td colspan="6" class="error"><strong>Error:</strong> ${errorMsg}<br><small>${helpText}</small>${data.availableEndpoints ? '<br><small>Available endpoints: ' + data.availableEndpoints.join(', ') + '</small>' : ''}</td></tr>`;
                     console.error('Firebase users error:', data);
                     return;
                 }
@@ -710,6 +737,18 @@
                     autoRefreshInterval = null;
                 }
             }
+        });
+        
+        // Show which server is being used
+        window.addEventListener('DOMContentLoaded', function() {
+            const serverInfo = document.createElement('div');
+            serverInfo.style.cssText = 'position: fixed; top: 10px; right: 10px; background: #1e293b; color: #10b981; padding: 10px 15px; border-radius: 5px; font-size: 12px; z-index: 10000; border: 1px solid #10b981;';
+            serverInfo.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 5px;">🔗 Connected to:</div>
+                <div style="font-family: monospace; color: #60a5fa;">${SERVER_URL}</div>
+                <div style="margin-top: 5px; font-size: 10px; color: #94a3b8;">${SERVER_URL === WORKER_URL ? '✅ Cloudflare Worker' : '⚠️ Direct Backend'}</div>
+            `;
+            document.body.appendChild(serverInfo);
         });
         
         // Initial Load
