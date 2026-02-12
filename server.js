@@ -370,14 +370,17 @@ setInterval(async () => {
                     await endTournament(currentTournamentKey);
                     
                     // Create new tournament
-                    const newTournamentId = `tournament_scheduled_${schedule.id}_${Date.now()}`;
+                    const tournamentStartTime = Date.now();
+                    const newTournamentId = `tournament_scheduled_${schedule.id}_${tournamentStartTime}`;
                     currentTournamentKey = newTournamentId;
                     console.log(`   ➕ Creating new tournament: ${newTournamentId}`);
                     
-                    // Store custom timing
-                    await redis.setex(`tournament:${newTournamentId}:duration`, Math.ceil(schedule.duration / 1000), schedule.duration.toString());
-                    await redis.setex(`tournament:${newTournamentId}:playTime`, Math.ceil(schedule.duration / 1000), schedule.playTime.toString());
-                    await redis.setex(`tournament:${newTournamentId}:leaderboardTime`, Math.ceil(schedule.duration / 1000), schedule.leaderboardTime.toString());
+                    // Store custom timing with start time
+                    const expirySeconds = Math.ceil(schedule.duration / 1000);
+                    await redis.setex(`tournament:${newTournamentId}:duration`, expirySeconds, schedule.duration.toString());
+                    await redis.setex(`tournament:${newTournamentId}:playTime`, expirySeconds, schedule.playTime.toString());
+                    await redis.setex(`tournament:${newTournamentId}:leaderboardTime`, expirySeconds, schedule.leaderboardTime.toString());
+                    await redis.setex(`tournament:${newTournamentId}:startTime`, expirySeconds, tournamentStartTime.toString());
                     
                     // Broadcast
                     io.emit('tournament_new', {
@@ -519,9 +522,49 @@ function getTournamentKey(timestamp = Date.now()) {
     return key;
 }
 
-function getTournamentTimeLeft() {
+// Helper to get custom tournament timing from Redis
+async function getCustomTournamentTiming(tournamentId) {
+    try {
+        const duration = await redis.get(`tournament:${tournamentId}:duration`);
+        const playTime = await redis.get(`tournament:${tournamentId}:playTime`);
+        const leaderboardTime = await redis.get(`tournament:${tournamentId}:leaderboardTime`);
+        const startTime = await redis.get(`tournament:${tournamentId}:startTime`);
+        
+        if (duration && playTime && leaderboardTime && startTime) {
+            return {
+                duration: parseInt(duration),
+                playTime: parseInt(playTime),
+                leaderboardTime: parseInt(leaderboardTime),
+                startTime: parseInt(startTime)
+            };
+        }
+    } catch (e) {
+        console.error("Error getting custom tournament timing:", e);
+    }
+    return null;
+}
+
+async function getTournamentTimeLeft(tournamentId = null) {
     const now = Date.now();
-    // Find the start of current 15-minute interval
+    
+    // If tournamentId provided, check for custom timing
+    if (tournamentId) {
+        const custom = await getCustomTournamentTiming(tournamentId);
+        if (custom) {
+            const elapsed = now - custom.startTime;
+            
+            // If we're in leaderboard time (after play time), return 0
+            if (elapsed >= custom.playTime) {
+                return 0; // Tournament ended, leaderboard time
+            }
+            
+            // Return remaining play time
+            const remaining = custom.playTime - elapsed;
+            return Math.max(0, remaining); // Return in ms
+        }
+    }
+    
+    // Default: Find the start of current 15-minute interval
     const intervalStart = Math.floor(now / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS;
     const elapsed = now - intervalStart;
     
@@ -993,7 +1036,7 @@ io.on('connection', (socket) => {
             nr: newRecord ? 1 : 0,
             tl: optimizedLeaders,
             tid: currentTournamentId,
-            rem: getTournamentTimeLeft() // Send remaining time logic
+            rem: await getTournamentTimeLeft(session.tournamentId || currentTournamentKey) // Send remaining time logic
         });
     });
 
