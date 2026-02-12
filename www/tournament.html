@@ -631,8 +631,7 @@
             
             // Don't start timer if time left is 0 or negative (leaderboard time)
             if (!msLeft || msLeft <= 0) {
-                if (display) display.innerText = "LEADERBOARD TIME";
-                if (nextTourDisplay) nextTourDisplay.innerText = "00:00:00";
+                startLeaderboardCountdown();
                 return;
             }
 
@@ -640,9 +639,7 @@
 
             const updateDisplay = () => {
                 if (secondsRemaining <= 0) {
-                    display.innerText = "LEADERBOARD TIME";
-                    if (nextTourDisplay) nextTourDisplay.innerText = "00:00:00";
-                    clearInterval(tournamentInterval);
+                    startLeaderboardCountdown();
                     return;
                 }
 
@@ -659,6 +656,46 @@
             };
 
             updateDisplay();
+            tournamentInterval = setInterval(updateDisplay, 1000);
+        }
+
+        function startLeaderboardCountdown() {
+            if (tournamentInterval) clearInterval(tournamentInterval);
+
+            const display = document.getElementById('countdown');
+            const LEADERBOARD_TIME_MS = 3 * 60 * 1000; // 3 minutes
+            const TOURNAMENT_DURATION_MS = 15 * 60 * 1000; // 15 minutes total
+            
+            // Calculate remaining leaderboard time
+            const now = Date.now();
+            const intervalStart = Math.floor(now / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS;
+            const elapsed = now - intervalStart;
+            const leaderboardElapsed = elapsed - (12 * 60 * 1000); // Subtract 12 minutes play time
+            const leaderboardRemaining = LEADERBOARD_TIME_MS - leaderboardElapsed;
+
+            let secondsRemaining = Math.max(0, Math.floor(leaderboardRemaining / 1000));
+
+            const updateDisplay = () => {
+                if (secondsRemaining <= 0) {
+                    // Time's up - refresh page for next tournament
+                    display.innerText = "Next tournament starting...";
+                    clearInterval(tournamentInterval);
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                    return;
+                }
+
+                const m = Math.floor(secondsRemaining / 60);
+                const s = secondsRemaining % 60;
+                const timeStr = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+                display.innerText = `Next tournament starting in: ${timeStr}`;
+                
+                secondsRemaining--;
+            };
+
+            updateDisplay(); // Immediate update
             tournamentInterval = setInterval(updateDisplay, 1000);
         }
 
