@@ -28,6 +28,94 @@ fastify.get('/', async () => {
     return { status: 'Time Clash Socket Server Online' };
 });
 
+// --- ADMIN ENDPOINTS ---
+// Admin: Get Active Firebase Users (Real-time active users)
+fastify.get('/api/admin/firebase-active-users', async (req, reply) => {
+    try {
+        // Get active user IDs from socket connections
+        const activeUserIds = Array.from(activeUsers.values()).map(u => u.userId);
+        
+        if (activeUserIds.length === 0) {
+            return { count: 0, users: [], message: "No active users currently" };
+        }
+
+        // If Firebase Admin is available, fetch full user details
+        if (isSecureMode && admin && admin.auth) {
+            const firebaseUsersPromises = activeUserIds.map(async (uid) => {
+                try {
+                    const user = await admin.auth().getUser(uid);
+                    const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
+                    return {
+                        uid: user.uid,
+                        email: user.email || 'N/A',
+                        displayName: user.displayName || user.email?.split('@')[0] || 'Guest',
+                        photoURL: user.photoURL || null,
+                        emailVerified: user.emailVerified || false,
+                        creationTime: user.metadata.creationTime,
+                        lastSignInTime: user.metadata.lastSignInTime || null,
+                        connectedAt: activeUser?.connectedAt || Date.now(),
+                        lastActivity: activeUser?.lastActivity || Date.now(),
+                        isActive: true
+                    };
+                } catch (e) {
+                    // User might not exist in Firebase (guest user)
+                    const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
+                    return {
+                        uid: uid,
+                        email: activeUser?.email || 'Guest User',
+                        displayName: activeUser?.username || 'Guest',
+                        photoURL: null,
+                        emailVerified: false,
+                        creationTime: null,
+                        lastSignInTime: null,
+                        connectedAt: activeUser?.connectedAt || Date.now(),
+                        lastActivity: activeUser?.lastActivity || Date.now(),
+                        isActive: true,
+                        isGuest: true
+                    };
+                }
+            });
+
+            const users = await Promise.all(firebaseUsersPromises);
+            return { 
+                count: users.length,
+                users: users.sort((a, b) => b.lastActivity - a.lastActivity)
+            };
+        } else {
+            // Fallback: Return active users from socket connections without Firebase details
+            const users = activeUserIds.map(uid => {
+                const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
+                return {
+                    uid: uid,
+                    email: activeUser?.email || 'N/A',
+                    displayName: activeUser?.username || 'Guest',
+                    photoURL: null,
+                    emailVerified: false,
+                    creationTime: null,
+                    lastSignInTime: null,
+                    connectedAt: activeUser?.connectedAt || Date.now(),
+                    lastActivity: activeUser?.lastActivity || Date.now(),
+                    isActive: true,
+                    isGuest: !activeUser?.email
+                };
+            });
+            
+            return { 
+                count: users.length,
+                users: users.sort((a, b) => b.lastActivity - a.lastActivity),
+                message: "Firebase Admin not available - showing socket connection data"
+            };
+        }
+    } catch (e) {
+        console.error("❌ Error fetching active Firebase users:", e);
+        return { 
+            error: e.message,
+            count: 0,
+            users: []
+        };
+    }
+});
+
 // --- START SERVER FIRST ---
 const start = async () => {
     try {
@@ -91,6 +179,7 @@ function getTournamentTimeLeft() {
 // --- IN-MEMORY STORES (For Extreme Performance) ---
 const gameIntervals = new Map();
 const sessionStore = new Map(); // Replaces Redis for hot session data
+const activeUsers = new Map(); // Track active users: socketId -> {userId, email, username, connectedAt, lastActivity}
 let cachedTop3 = []; // Cache leaderboard
 let lastLeaderboardUpdate = 0; // Timestamp
 let currentCachedTournamentId = "";
@@ -214,6 +303,8 @@ io.on('connection', (socket) => {
         await refreshLeaderboardCache();
 
         let userId = data.u || socket.id;
+        let userEmail = data.e || null; // Email from client
+        let username = data.n || 'Guest'; // Username from client
         let isVerified = false;
 
         // --- SECURITY CHECK ---
@@ -221,6 +312,8 @@ io.on('connection', (socket) => {
             try {
                 const decodedToken = await admin.auth().verifyIdToken(data.t);
                 userId = decodedToken.uid; // USE REAL UID from Google
+                userEmail = decodedToken.email || userEmail;
+                username = decodedToken.name || username;
                 isVerified = true;
                 // console.log(`✅ Verified User: ${userId}`);
             } catch (err) {
@@ -264,6 +357,16 @@ io.on('connection', (socket) => {
             mode: mode // STORE MODE
         };
         sessionStore.set(socket.id, session);
+
+        // Track active user
+        activeUsers.set(socket.id, {
+            userId: userId,
+            email: userEmail,
+            username: username,
+            connectedAt: Date.now(),
+            lastActivity: Date.now(),
+            socketId: socket.id
+        });
 
         // Send Game Ready Data (grd)
         // t: target, b: best, r: rank, tl: timeLeft (ms), tid: tournamentId
@@ -381,5 +484,6 @@ io.on('connection', (socket) => {
             gameIntervals.delete(socket.id);
         }
         sessionStore.delete(socket.id);
+        activeUsers.delete(socket.id); // Remove from active users
     });
 });
