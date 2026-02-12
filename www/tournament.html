@@ -785,33 +785,24 @@
                 hasActiveTournament = data.hasActiveTournament || false;
                 nextScheduledTournament = data.scheduled || null;
 
-                // Update UI based on tournament status
-                // If socket is connected, it will handle active tournament via 'grd' event
-                // But we still need to handle scheduled tournaments
-                if (socket && socket.connected) {
-                    // Socket is connected - only update if there's no active tournament
-                    // This ensures scheduled countdown continues even after socket connects
-                    if (!hasActiveTournament) {
-                        // No active tournament - show scheduled countdown if available
-                        if (nextScheduledTournament) {
-                            startScheduledCountdown(nextScheduledTournament);
-                        } else {
-                            // Only show "No Tournament" if socket hasn't sent any data yet
-                            // Otherwise let socket 'grd' event handle it
-                            if (!hasActiveTournament) {
-                                showNoTournamentMessage();
-                            }
-                        }
-                    }
-                } else {
-                    // Socket not connected yet - show appropriate message
-                    if (!hasActiveTournament) {
-                        if (nextScheduledTournament) {
-                            startScheduledCountdown(nextScheduledTournament);
-                        } else {
+                // Always update scheduled countdown if there's no active tournament
+                // This ensures scheduled countdown continues even after socket connects
+                // Socket 'grd' event will handle active tournament display
+                if (!hasActiveTournament) {
+                    // No active tournament - show scheduled countdown if available
+                    if (nextScheduledTournament) {
+                        startScheduledCountdown(nextScheduledTournament);
+                    } else {
+                        // Only show "No Tournament" if socket hasn't connected yet
+                        // If socket is connected, let it handle the display via 'grd' event
+                        if (!socket || !socket.connected) {
                             showNoTournamentMessage();
                         }
                     }
+                } else {
+                    // Active tournament exists - stop scheduled countdown
+                    // Socket 'grd' event will handle active tournament display
+                    stopScheduledCountdown();
                 }
 
                 if (data.history) {
