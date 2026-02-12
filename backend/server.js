@@ -444,6 +444,109 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Admin: Get Firebase Users (All registered users from Firebase Auth)
+    fastify.get('/api/admin/firebase-users', async (req, reply) => {
+        try {
+            if (!isSecureMode || !admin) {
+                return { error: "Firebase Admin not initialized" };
+            }
+
+            const listUsersResult = await admin.auth().listUsers(1000);
+            const firebaseUsers = listUsersResult.users.map(user => ({
+                uid: user.uid,
+                email: user.email || 'N/A',
+                displayName: user.displayName || user.email?.split('@')[0] || 'Guest',
+                photoURL: user.photoURL || null,
+                emailVerified: user.emailVerified || false,
+                creationTime: user.metadata.creationTime,
+                lastSignInTime: user.metadata.lastSignInTime || 'Never',
+                providerData: user.providerData.map(p => p.providerId)
+            }));
+
+            // Get active users from socket connections
+            const activeUserIds = new Set(Array.from(activeUsers.values()).map(u => u.userId));
+            
+            // Mark which Firebase users are currently active
+            const usersWithStatus = firebaseUsers.map(user => ({
+                ...user,
+                isActive: activeUserIds.has(user.uid)
+            }));
+
+            return { 
+                count: firebaseUsers.length,
+                activeCount: usersWithStatus.filter(u => u.isActive).length,
+                users: usersWithStatus.sort((a, b) => {
+                    // Sort: active first, then by last sign in
+                    if (a.isActive !== b.isActive) return b.isActive - a.isActive;
+                    return new Date(b.lastSignInTime) - new Date(a.lastSignInTime);
+                })
+            };
+        } catch (e) {
+            return { error: e.message };
+        }
+    });
+
+    // Admin: Get Active Firebase Users (Real-time active users)
+    fastify.get('/api/admin/firebase-active-users', async (req, reply) => {
+        try {
+            if (!isSecureMode || !admin) {
+                return { error: "Firebase Admin not initialized" };
+            }
+
+            // Get active user IDs from socket connections
+            const activeUserIds = Array.from(activeUsers.values()).map(u => u.userId);
+            
+            if (activeUserIds.length === 0) {
+                return { count: 0, users: [] };
+            }
+
+            // Fetch Firebase user details for active users
+            const firebaseUsersPromises = activeUserIds.map(async (uid) => {
+                try {
+                    const user = await admin.auth().getUser(uid);
+                    const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
+                    return {
+                        uid: user.uid,
+                        email: user.email || 'N/A',
+                        displayName: user.displayName || user.email?.split('@')[0] || 'Guest',
+                        photoURL: user.photoURL || null,
+                        emailVerified: user.emailVerified || false,
+                        creationTime: user.metadata.creationTime,
+                        lastSignInTime: user.metadata.lastSignInTime || 'Never',
+                        connectedAt: activeUser?.connectedAt || Date.now(),
+                        lastActivity: activeUser?.lastActivity || Date.now(),
+                        isActive: true
+                    };
+                } catch (e) {
+                    // User might not exist in Firebase (guest user)
+                    const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
+                    return {
+                        uid: uid,
+                        email: activeUser?.email || 'Guest User',
+                        displayName: activeUser?.username || 'Guest',
+                        photoURL: null,
+                        emailVerified: false,
+                        creationTime: 'N/A',
+                        lastSignInTime: 'N/A',
+                        connectedAt: activeUser?.connectedAt || Date.now(),
+                        lastActivity: activeUser?.lastActivity || Date.now(),
+                        isActive: true,
+                        isGuest: true
+                    };
+                }
+            });
+
+            const users = await Promise.all(firebaseUsersPromises);
+
+            return { 
+                count: users.length,
+                users: users.sort((a, b) => b.lastActivity - a.lastActivity)
+            };
+        } catch (e) {
+            return { error: e.message };
+        }
+    });
+
     socket.on('ig', async (data) => {
         if (!checkRateLimit(socket, 'ig')) {
             return socket.emit('to', 'Too many requests. Please wait.'); // 'to' = toast/error

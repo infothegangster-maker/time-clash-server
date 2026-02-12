@@ -318,7 +318,7 @@
         
         <!-- ACTIVE USERS -->
         <div class="section">
-            <div class="section-title">👥 Active Users</div>
+            <div class="section-title">👥 Active Users (Firebase - Real-time)</div>
             <input type="text" class="search-box" id="search-users" placeholder="Search users by email, username, or ID..." onkeyup="filterUsers()">
             <div class="table-container">
                 <table id="active-users-table">
@@ -398,7 +398,7 @@
         
         <!-- ALL USERS -->
         <div class="section">
-            <div class="section-title">👤 All Users Database</div>
+            <div class="section-title">👤 All Firebase Users (All Registered Users)</div>
             <input type="text" class="search-box" id="search-all-users" placeholder="Search all users..." onkeyup="filterAllUsers()">
             <div class="table-container">
                 <table id="all-users-table">
@@ -406,10 +406,10 @@
                         <tr>
                             <th>User ID</th>
                             <th>Email</th>
-                            <th>Username</th>
+                            <th>Display Name</th>
                             <th>Status</th>
-                            <th>Best Score</th>
-                            <th>Last Activity</th>
+                            <th>Email Verified</th>
+                            <th>Last Sign In</th>
                         </tr>
                     </thead>
                     <tbody id="all-users-body">
@@ -450,10 +450,10 @@
             return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
         }
         
-        // Load Active Users
+        // Load Active Users from Firebase
         async function loadActiveUsers() {
             try {
-                const res = await fetch(`${SERVER_URL}/api/admin/active-users`);
+                const res = await fetch(`${SERVER_URL}/api/admin/firebase-active-users`);
                 const data = await res.json();
                 
                 if (data.error) {
@@ -473,12 +473,12 @@
                 
                 tbody.innerHTML = activeUsersData.map(user => `
                     <tr>
-                        <td>${user.userId.substring(0, 20)}...</td>
+                        <td>${user.uid.substring(0, 20)}...</td>
                         <td>${user.email}</td>
-                        <td>${user.username}</td>
+                        <td>${user.displayName}</td>
                         <td class="timestamp">${formatTime(user.connectedAt)}</td>
                         <td class="timestamp">${formatTime(user.lastActivity)}</td>
-                        <td><span class="badge badge-success">Active</span></td>
+                        <td>${user.isGuest ? '<span class="badge badge-warning">Guest</span>' : '<span class="badge badge-success">Active</span>'}</td>
                     </tr>
                 `).join('');
             } catch (e) {
@@ -617,10 +617,10 @@
             }
         }
         
-        // Load All Users
+        // Load All Users from Firebase
         async function loadAllUsers() {
             try {
-                const res = await fetch(`${SERVER_URL}/api/admin/all-users`);
+                const res = await fetch(`${SERVER_URL}/api/admin/firebase-users`);
                 const data = await res.json();
                 
                 if (data.error) {
@@ -631,6 +631,9 @@
                 
                 allUsersData = data.users || [];
                 
+                // Update stats
+                document.getElementById('stat-active-users').textContent = data.activeCount || 0;
+                
                 const tbody = document.getElementById('all-users-body');
                 if (allUsersData.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No users found</td></tr>';
@@ -639,12 +642,12 @@
                 
                 tbody.innerHTML = allUsersData.map(user => `
                     <tr>
-                        <td>${user.userId.substring(0, 20)}...</td>
+                        <td>${user.uid.substring(0, 20)}...</td>
                         <td>${user.email}</td>
-                        <td>${user.username}</td>
+                        <td>${user.displayName}</td>
                         <td>${user.isActive ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-warning">Inactive</span>'}</td>
-                        <td>${user.bestScore ? user.bestScore + 'ms' : 'N/A'}</td>
-                        <td class="timestamp">${user.lastActivity ? formatTime(user.lastActivity) : 'N/A'}</td>
+                        <td>${user.emailVerified ? '<span class="badge badge-info">Verified</span>' : '<span class="badge badge-warning">Unverified</span>'}</td>
+                        <td class="timestamp">${user.lastSignInTime !== 'Never' ? formatTime(new Date(user.lastSignInTime).getTime()) : 'Never'}</td>
                     </tr>
                 `).join('');
             } catch (e) {
@@ -658,6 +661,7 @@
             const search = document.getElementById('search-users').value.toLowerCase();
             const rows = document.querySelectorAll('#active-users-body tr');
             rows.forEach(row => {
+                if (row.querySelector('td.error') || row.querySelector('td.loading')) return;
                 const text = row.textContent.toLowerCase();
                 row.style.display = text.includes(search) ? '' : 'none';
             });
@@ -667,6 +671,7 @@
             const search = document.getElementById('search-all-users').value.toLowerCase();
             const rows = document.querySelectorAll('#all-users-body tr');
             rows.forEach(row => {
+                if (row.querySelector('td.error') || row.querySelector('td.loading')) return;
                 const text = row.textContent.toLowerCase();
                 row.style.display = text.includes(search) ? '' : 'none';
             });
