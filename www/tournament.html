@@ -733,11 +733,34 @@
                 
                 if (timeLeft <= 0) {
                     stopScheduledCountdown();
-                    showNoTournamentMessage();
-                    // Refresh page after 2 seconds to check for new tournament
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 2000);
+                    // Instead of page refresh, just fetch tournament data to check if tournament started
+                    // This provides smooth user experience without page reload
+                    display.innerHTML = `
+                        <div style="text-align: center; padding: 20px;">
+                            <div style="font-size: 0.9rem; color: #60a5fa; margin-bottom: 10px;">⏳ Tournament Starting...</div>
+                            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 5px;">Checking tournament status...</div>
+                        </div>
+                    `;
+                    
+                    // Fetch tournament data to check if tournament started
+                    fetchTournamentData();
+                    
+                    // If socket is connected, re-emit 'ig' to get latest tournament status
+                    if (socket && socket.connected) {
+                        const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
+                        const email = localStorage.getItem('tc_email') || null;
+                        const username = localStorage.getItem('tc_username') || 'Guest';
+                        const idToken = localStorage.getItem('tc_id_token') || null;
+                        
+                        socket.emit('ig', { 
+                            u: savedId,
+                            e: email,
+                            n: username,
+                            t: idToken,
+                            m: 't'
+                        });
+                    }
+                    
                     return;
                 }
 
