@@ -877,15 +877,9 @@
 
         function enterTournament() {
             localStorage.setItem('game_mode', 'tournament');
-            // Consuming try here? Or letting Game.html consume?
-            // User flow: Click Enter -> Go to Game.
-            // Game.html logic consumes try on "START" button click. 
-            // That's redundant if we do it here. 
-            // But if we consume here, we need to tell Game.html "Already Consumed"?
-            // Simplest: Don't consume here. Just check.
-            // But wait, user said "click karke heart lene wala option", implies checking here.
-            // So we check here (rendered in UI). If valid, we go to game. 
-            // Game.html consumes on 'START'. Correct.
+            // Set flag to skip health check on game page load
+            // Health check will happen only when user clicks PLAY button
+            localStorage.setItem('skip_health_check', 'true');
             window.location.href = 'game.html';
         }
 

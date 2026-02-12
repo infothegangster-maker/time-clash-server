@@ -858,9 +858,13 @@
                     if (data.tl && data.tl > 0) {
                         Game.startTournamentTimer(data.tl);
                     } else {
-                        // Leaderboard time - show ended message
+                        // Leaderboard time - redirect to tournament page
                         const timerDisplay = document.getElementById('tournament-timer');
                         if (timerDisplay) timerDisplay.innerText = "LEADERBOARD";
+                        // Redirect after a short delay
+                        setTimeout(() => {
+                            window.location.href = 'tournament.html';
+                        }, 1000);
                     }
 
                     Hacking.resetView();
@@ -882,9 +886,13 @@
                     if (data.rem && data.rem > 0) {
                         Game.startTournamentTimer(data.rem);
                     } else {
-                        // Leaderboard time - show ended message
+                        // Leaderboard time - redirect to tournament page
                         const timerDisplay = document.getElementById('tournament-timer');
                         if (timerDisplay) timerDisplay.innerText = "LEADERBOARD";
+                        // Redirect after a short delay
+                        setTimeout(() => {
+                            window.location.href = 'tournament.html';
+                        }, 1000);
                     }
                 });
             },
@@ -942,8 +950,16 @@
             },
 
             resetToGame() {
-                // Check Trys Logic
-                if (!TrysManager.checkTrys()) return;
+                // Check if coming from tournament page - skip health check here
+                // Health check will happen when user clicks START button
+                const skipCheck = localStorage.getItem('skip_health_check') === 'true';
+                if (!skipCheck) {
+                    // Only check if not coming from tournament page
+                    if (!TrysManager.checkTrys()) return;
+                } else {
+                    // Clear the flag
+                    localStorage.removeItem('skip_health_check');
+                }
 
                 const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
                 const email = localStorage.getItem('tc_email') || null;
@@ -1001,6 +1017,8 @@
                     if (secondsRemaining <= 0) {
                         display.innerText = "LEADERBOARD";
                         clearInterval(this.tournamentInterval);
+                        // Play time ended - redirect to tournament page
+                        window.location.href = 'tournament.html';
                         return;
                     }
 
