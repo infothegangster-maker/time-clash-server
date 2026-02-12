@@ -717,8 +717,16 @@ function startTournamentCheck() {
 }
 
 // Initialize on startup
+console.log(`🚀 [INIT] Loading tournament state and starting check intervals...`);
 loadTournamentState().then(() => {
-    startTournamentCheck();
+    console.log(`📊 [INIT] Tournament state loaded - Auto enabled: ${autoTournamentEnabled}`);
+    if (autoTournamentEnabled) {
+        startTournamentCheck();
+        console.log(`✅ [INIT] Auto tournament check interval started`);
+    } else {
+        console.log(`⏸️ [INIT] Auto tournaments disabled - NOT starting check interval`);
+    }
+    console.log(`✅ [INIT] Tournament management initialized`);
 });
 
 // Global Tournament End Function
