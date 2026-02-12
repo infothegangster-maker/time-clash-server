@@ -91,6 +91,7 @@ function getTournamentTimeLeft() {
 // --- IN-MEMORY STORES (For Extreme Performance) ---
 const gameIntervals = new Map();
 const sessionStore = new Map(); // Replaces Redis for hot session data
+const activeUsers = new Map(); // Track active users: socketId -> {userId, email, username, connectedAt, lastActivity}
 let cachedTop3 = []; // Cache leaderboard
 let lastLeaderboardUpdate = 0; // Timestamp
 let currentCachedTournamentId = "";
@@ -281,6 +282,168 @@ io.on('connection', (socket) => {
         }
     });
 
+    // --- ADMIN API ENDPOINTS ---
+    // Admin: Get Active Users
+    fastify.get('/api/admin/active-users', async (req, reply) => {
+        try {
+            const users = Array.from(activeUsers.values()).map(u => ({
+                userId: u.userId,
+                email: u.email || 'N/A',
+                username: u.username || 'Guest',
+                connectedAt: u.connectedAt,
+                lastActivity: u.lastActivity,
+                socketId: u.socketId
+            }));
+            return { count: users.length, users };
+        } catch (e) {
+            return { error: e.message };
+        }
+    });
+
+    // Admin: Get Current Tournament Details
+    fastify.get('/api/admin/current-tournament', async (req, reply) => {
+        try {
+            const currentTournamentId = getTournamentKey();
+            const allParticipants = await redis.zrange(currentTournamentId, 0, -1, 'WITHSCORES');
+            
+            const participants = [];
+            if (Array.isArray(allParticipants)) {
+                if (allParticipants.length > 0 && typeof allParticipants[0] === 'object') {
+                    allParticipants.forEach(p => {
+                        participants.push({ userId: p.member, score: p.score });
+                    });
+                } else {
+                    for (let i = 0; i < allParticipants.length; i += 2) {
+                        participants.push({ userId: allParticipants[i], score: allParticipants[i + 1] });
+                    }
+                }
+            }
+
+            // Get user emails from active users or session store
+            const participantsWithDetails = participants.map(p => {
+                const activeUser = Array.from(activeUsers.values()).find(u => u.userId === p.userId);
+                const session = Array.from(sessionStore.values()).find(s => s.userId === p.userId);
+                return {
+                    userId: p.userId,
+                    score: p.score,
+                    email: activeUser?.email || session?.email || 'N/A',
+                    username: activeUser?.username || session?.username || 'Guest'
+                };
+            });
+
+            return {
+                tournamentId: currentTournamentId,
+                participantCount: participants.length,
+                participants: participantsWithDetails.sort((a, b) => a.score - b.score),
+                timeLeft: getTournamentTimeLeft(),
+                playTimeLeft: Math.max(0, PLAY_TIME_MS - (Date.now() - Math.floor(Date.now() / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS))
+            };
+        } catch (e) {
+            return { error: e.message };
+        }
+    });
+
+    // Admin: Get Tournament History with Full Details
+    fastify.get('/api/admin/tournament-history', async (req, reply) => {
+        try {
+            const historyRaw = await redis.lrange('tournament_history', 0, 49);
+            const history = historyRaw.map(x => JSON.parse(x));
+            
+            // Get full participant list for each tournament
+            const historyWithDetails = await Promise.all(history.map(async (tournament) => {
+                try {
+                    const allParticipants = await redis.zrange(tournament.id, 0, -1, 'WITHSCORES');
+                    const participants = [];
+                    if (Array.isArray(allParticipants)) {
+                        if (allParticipants.length > 0 && typeof allParticipants[0] === 'object') {
+                            allParticipants.forEach(p => {
+                                participants.push({ userId: p.member, score: p.score });
+                            });
+                        } else {
+                            for (let i = 0; i < allParticipants.length; i += 2) {
+                                participants.push({ userId: allParticipants[i], score: allParticipants[i + 1] });
+                            }
+                        }
+                    }
+                    return {
+                        ...tournament,
+                        participantCount: participants.length,
+                        allParticipants: participants.sort((a, b) => a.score - b.score)
+                    };
+                } catch (e) {
+                    return { ...tournament, participantCount: 0, allParticipants: [] };
+                }
+            }));
+
+            return { history: historyWithDetails };
+        } catch (e) {
+            return { error: e.message };
+        }
+    });
+
+    // Admin: Get System Stats
+    fastify.get('/api/admin/system-stats', async (req, reply) => {
+        try {
+            const activeCount = activeUsers.size;
+            const sessionCount = sessionStore.size;
+            const runningGames = gameIntervals.size;
+            const currentTournamentId = getTournamentKey();
+            
+            // Get Redis stats
+            const tournamentKeys = await redis.keys('tournament_*');
+            const totalTournaments = tournamentKeys.filter(k => !k.includes('_target') && !k.includes('history')).length;
+
+            return {
+                activeUsers: activeCount,
+                activeSessions: sessionCount,
+                runningGames: runningGames,
+                currentTournament: currentTournamentId,
+                totalTournaments: totalTournaments,
+                serverUptime: process.uptime(),
+                memoryUsage: process.memoryUsage(),
+                timestamp: Date.now()
+            };
+        } catch (e) {
+            return { error: e.message };
+        }
+    });
+
+    // Admin: Get All Users (from sessions and active)
+    fastify.get('/api/admin/all-users', async (req, reply) => {
+        try {
+            const activeUsersList = Array.from(activeUsers.values());
+            const sessionUsers = Array.from(sessionStore.values());
+            
+            const allUsers = new Map();
+            activeUsersList.forEach(u => {
+                allUsers.set(u.userId, {
+                    userId: u.userId,
+                    email: u.email || 'N/A',
+                    username: u.username || 'Guest',
+                    isActive: true,
+                    connectedAt: u.connectedAt,
+                    lastActivity: u.lastActivity
+                });
+            });
+            
+            sessionUsers.forEach(s => {
+                if (!allUsers.has(s.userId)) {
+                    allUsers.set(s.userId, {
+                        userId: s.userId,
+                        email: s.email || 'N/A',
+                        username: s.username || 'Guest',
+                        isActive: false,
+                        bestScore: s.bestScore
+                    });
+                }
+            });
+
+            return { count: allUsers.size, users: Array.from(allUsers.values()) };
+        } catch (e) {
+            return { error: e.message };
+        }
+    });
+
     socket.on('ig', async (data) => {
         if (!checkRateLimit(socket, 'ig')) {
             return socket.emit('to', 'Too many requests. Please wait.'); // 'to' = toast/error
@@ -291,12 +454,16 @@ io.on('connection', (socket) => {
 
         let userId = data.u || socket.id;
         let isVerified = false;
+        let userEmail = null;
+        let username = null;
 
         // --- SECURITY CHECK ---
         if (isSecureMode && data.t) {
             try {
                 const decodedToken = await admin.auth().verifyIdToken(data.t);
                 userId = decodedToken.uid; // USE REAL UID from Google
+                userEmail = decodedToken.email;
+                username = decodedToken.name || decodedToken.email?.split('@')[0];
                 isVerified = true;
                 // console.log(`✅ Verified User: ${userId}`);
             } catch (err) {
@@ -304,6 +471,16 @@ io.on('connection', (socket) => {
                 // For now, valid tokens are preferred, but we verify anyway
             }
         }
+
+        // Track active user
+        activeUsers.set(socket.id, {
+            userId: userId,
+            email: userEmail,
+            username: username,
+            connectedAt: Date.now(),
+            lastActivity: Date.now(),
+            socketId: socket.id
+        });
 
         // Mode: 'p' = Practice, 't' = Tournament (Default)
         const mode = data.m === 'p' ? 'p' : 't';
@@ -355,6 +532,8 @@ io.on('connection', (socket) => {
         // STORE IN MEMORY
         const session = {
             userId,
+            email: userEmail,
+            username: username,
             targetTime,
             startTime: 0,
             status: 'ready',
@@ -364,6 +543,11 @@ io.on('connection', (socket) => {
             mode: mode // STORE MODE
         };
         sessionStore.set(socket.id, session);
+        
+        // Update active user last activity
+        if (activeUsers.has(socket.id)) {
+            activeUsers.get(socket.id).lastActivity = Date.now();
+        }
 
         // Send Game Ready Data (grd)
         // t: target, b: best, r: rank, tl: timeLeft (ms), tid: tournamentId
@@ -481,5 +665,6 @@ io.on('connection', (socket) => {
             gameIntervals.delete(socket.id);
         }
         sessionStore.delete(socket.id);
+        activeUsers.delete(socket.id); // Remove from active users
     });
 });
