@@ -609,11 +609,14 @@
             });
 
             socket.on('grd', (data) => {
-                // Check if no tournament exists
-                if (data.noTournament || !data.tid) {
+                // Check for explicit "No Tournament" flag OR Phase 'n'
+                if (data.noTournament || !data.tid || data.ph === 'n') {
                     toast.style.display = 'none';
                     hasActiveTournament = false;
-                    // If no active tournament, check for scheduled tournament
+
+                    // Hide Enter Button
+                    TrysManager.renderActionKey(false);
+
                     if (nextScheduledTournament) {
                         startScheduledCountdown(nextScheduledTournament);
                     } else {
@@ -622,29 +625,38 @@
                     return;
                 }
 
-                // Mark that we have an active tournament
+                // Make sure we have an active tournament
                 hasActiveTournament = true;
-                stopScheduledCountdown(); // Stop scheduled countdown when active tournament starts
+                stopScheduledCountdown();
 
-                // Hacking.target = data.t / 1000; // Not used here
-                if (data.tl && data.tl > 0) {
-                    // Play time - show Enter button and timer
-                    startRealTimer(data.tl);
-                    toast.style.display = 'none';
-                    // Show Enter button
-                    TrysManager.renderActionKey(true);
-                } else {
-                    // Leaderboard time - hide Enter button
-                    toast.style.display = 'none';
-                    // Hide Enter button
+                // HANDLE PHASES
+                // 'p' = Playing
+                // 'l' = Leaderboard
+                if (data.ph === 'l') {
+                    // LEADERBOARD PHASE
+                    // Hide Enter Button
                     TrysManager.renderActionKey(false);
+                    toast.style.display = 'none';
 
-                    // During leaderboard time, check if there's a scheduled tournament for after this tournament ends
-                    // But first, show leaderboard countdown for current tournament
-                    if (nextScheduledTournament) {
-                        startScheduledCountdown(nextScheduledTournament);
-                    } else {
-                        showNoTournamentMessage();
+                    // Show "Tournament Ended" message
+                    const display = document.getElementById('countdown');
+                    if (display) {
+                        display.innerHTML = `
+                            <div style="text-align: center; padding: 20px;">
+                                <div style="font-size: 1.5rem; color: #fbbf24; margin-bottom: 10px;">🏆 Tournament Ended</div>
+                                <div style="font-size: 1rem; color: #94a3b8;">Calculating Winners...</div>
+                                <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">Next round starts soon</div>
+                            </div>
+                        `;
+                    }
+                } else {
+                    // PLAYING PHASE (Default)
+                    // Show Enter Button
+                    TrysManager.renderActionKey(true);
+                    toast.style.display = 'none';
+
+                    if (data.tl && data.tl > 0) {
+                        startRealTimer(data.tl);
                     }
                 }
             });
@@ -885,6 +897,7 @@
         const TrysManager = {
             trys: 0,
             regenTime: 15 * 60 * 1000, // 15 Minutes
+            _showEnterButton: false, // Track button state - DEFAULT HIDDEN until socket confirms
 
             init() {
                 // 1. NEW USER BONUS (Safety check)
@@ -932,11 +945,20 @@
                 this.checkRegen();
                 this.trys = parseInt(localStorage.getItem('user_trys') || '0');
                 // Health display removed - only shown on game page
-                this.renderActionKey();
+                // USE THE TRACKED STATE instead of defaulting to true
+                this._renderButton(this._showEnterButton);
             },
 
+            // Called by socket/tournament logic to SET the button state
             renderActionKey(showEnter = true) {
+                this._showEnterButton = showEnter;
+                this._renderButton(showEnter);
+            },
+
+            // Internal render - does not change state
+            _renderButton(showEnter) {
                 const area = document.getElementById('action-area');
+                if (!area) return;
                 if (showEnter) {
                     // Show Enter button during play time
                     area.innerHTML = `
@@ -948,7 +970,7 @@
                         </button>
                     `;
                 } else {
-                    // Hide Enter button during leaderboard time
+                    // Hide Enter button during leaderboard time or no tournament
                     area.innerHTML = '';
                 }
             },

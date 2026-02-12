@@ -648,6 +648,35 @@ async function getTournamentTimeLeft(tournamentId = null) {
     return remaining; // Return in ms
 }
 
+// Helper: Get Tournament Phase
+// 'p' = Playing (0 - 12 mins)
+// 'l' = Leaderboard (12 - 15 mins)
+// 'n' = None (No active tournament)
+async function getTournamentPhase(tournamentId = null) {
+    if (!tournamentId) return 'n';
+
+    const now = Date.now();
+    let elapsed = 0;
+    let playTime = PLAY_TIME_MS;
+
+    // Check custom timing
+    const custom = await getCustomTournamentTiming(tournamentId);
+    if (custom) {
+        elapsed = now - custom.startTime;
+        playTime = custom.playTime;
+    } else {
+        // Default 15-min interval
+        const intervalStart = Math.floor(now / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS;
+        elapsed = now - intervalStart;
+    }
+
+    if (elapsed < playTime) {
+        return 'p';
+    } else {
+        return 'l';
+    }
+}
+
 // --- IN-MEMORY STORES (For Extreme Performance) ---
 const gameIntervals = new Map();
 const sessionStore = new Map(); // Replaces Redis for hot session data
@@ -1032,14 +1061,17 @@ io.on('connection', (socket) => {
         console.log(`✅ Active User Tracked: ${userId} (${username}) - Total Active: ${activeUsers.size}`);
 
         // Send Game Ready Data (grd)
-        // t: target, b: best, r: rank, tl: timeLeft (ms), tid: tournamentId
+        // t: target, b: best, r: rank, tl: timeLeft (ms), tid: tournamentId, ph: phase
         const timeLeft = await getTournamentTimeLeft(currentTournamentId);
+        const phase = await getTournamentPhase(currentTournamentId);
+
         socket.emit('grd', {
             t: targetTime,
             b: bestScore !== null ? bestScore : -1,
             r: currentRank !== null ? currentRank + 1 : -1,
             tl: timeLeft,
-            tid: currentTournamentId
+            tid: currentTournamentId,
+            ph: phase
         });
     });
 
@@ -1143,7 +1175,10 @@ io.on('connection', (socket) => {
             nr: newRecord ? 1 : 0,
             tl: optimizedLeaders,
             tid: currentTournamentId,
-            rem: await getTournamentTimeLeft(session.tournamentId || currentTournamentKey) // Send remaining time logic
+            tl: optimizedLeaders,
+            tid: currentTournamentId,
+            rem: await getTournamentTimeLeft(session.tournamentId || currentTournamentKey), // Send remaining time logic
+            ph: await getTournamentPhase(session.tournamentId || currentTournamentKey)
         });
     });
 
