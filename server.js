@@ -349,11 +349,13 @@ setInterval(async () => {
                 const timeDiff = now - schedule.scheduledTime;
                 const scheduledDate = new Date(schedule.scheduledTime);
                 const currentDate = new Date(now);
+                const diffMinutes = Math.round(timeDiff / 60000);
+                const diffSeconds = Math.round(timeDiff / 1000);
                 
                 console.log(`   📅 Schedule ID: ${schedule.id}`);
-                console.log(`      Scheduled: ${scheduledDate.toLocaleString()} (${scheduledDate.toISOString()})`);
-                console.log(`      Current: ${currentDate.toLocaleString()} (${currentDate.toISOString()})`);
-                console.log(`      Time Diff: ${Math.round(timeDiff / 1000)} seconds (${timeDiff >= -5000 && timeDiff <= checkWindow ? '✅ IN WINDOW' : '❌ OUT OF WINDOW'})`);
+                console.log(`      Scheduled: ${scheduledDate.toLocaleString()} (UTC: ${scheduledDate.toISOString()})`);
+                console.log(`      Current: ${currentDate.toLocaleString()} (UTC: ${currentDate.toISOString()})`);
+                console.log(`      Time Diff: ${diffMinutes} minutes (${diffSeconds} seconds) ${timeDiff >= -5000 && timeDiff <= checkWindow ? '✅ IN WINDOW' : '❌ OUT OF WINDOW'}`);
                 
                 // Execute if scheduled time is within last 15 seconds or next 5 seconds
                 // This ensures we catch tournaments even if check runs slightly before or after scheduled time

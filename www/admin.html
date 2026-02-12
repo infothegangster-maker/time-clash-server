@@ -948,9 +948,15 @@
                     return;
                 }
                 
-                // Combine date and time
-                const dateTimeString = `${dateInput}T${timeInput}`;
-                const scheduledDate = new Date(dateTimeString);
+                // Combine date and time - IMPORTANT: Use local timezone, not UTC
+                // dateInput is in format YYYY-MM-DD (local date)
+                // timeInput is in format HH:MM (local time)
+                // Create date in local timezone
+                const [year, month, day] = dateInput.split('-').map(Number);
+                const [hours, minutes] = timeInput.split(':').map(Number);
+                
+                // Create date object in local timezone
+                const scheduledDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
                 
                 if (isNaN(scheduledDate.getTime())) {
                     alert('Invalid date/time!');
@@ -958,7 +964,19 @@
                 }
                 
                 const scheduledTime = scheduledDate.getTime();
-                if (scheduledTime < Date.now()) {
+                const now = Date.now();
+                
+                console.log('📅 Schedule Debug:', {
+                    dateInput,
+                    timeInput,
+                    localDate: scheduledDate.toLocaleString(),
+                    utcDate: scheduledDate.toUTCString(),
+                    timestamp: scheduledTime,
+                    now: now,
+                    diffMinutes: Math.round((scheduledTime - now) / 60000)
+                });
+                
+                if (scheduledTime < now) {
                     alert('Cannot schedule tournament in the past!');
                     return;
                 }
