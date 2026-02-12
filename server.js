@@ -318,35 +318,52 @@ fastify.delete('/api/admin/tournament/schedule/:scheduleId', async (req, reply) 
 });
 
 // Check scheduled tournaments every 10 seconds (more frequent for better accuracy)
+let scheduledCheckCount = 0;
 setInterval(async () => {
     try {
+        scheduledCheckCount++;
         const scheduled = await redis.lrange('tournament:scheduled', 0, 99);
+        
         if (!scheduled || scheduled.length === 0) {
+            if (scheduledCheckCount % 6 === 0) { // Log every 60 seconds
+                console.log(`🔍 [SCHEDULED CHECK #${scheduledCheckCount}] No scheduled tournaments found`);
+            }
             return; // No scheduled tournaments
         }
         
         const now = Date.now();
         const checkWindow = 15000; // 15 seconds window (check if scheduled time is within last 15 seconds or next 5 seconds)
         
+        console.log(`🔍 [SCHEDULED CHECK #${scheduledCheckCount}] Checking ${scheduled.length} scheduled tournament(s) at ${new Date(now).toISOString()}`);
+        
         for (const item of scheduled) {
             try {
                 const schedule = JSON.parse(item);
                 const timeDiff = now - schedule.scheduledTime;
+                const scheduledDate = new Date(schedule.scheduledTime);
+                const currentDate = new Date(now);
+                
+                console.log(`   📅 Schedule ID: ${schedule.id}`);
+                console.log(`      Scheduled: ${scheduledDate.toLocaleString()} (${scheduledDate.toISOString()})`);
+                console.log(`      Current: ${currentDate.toLocaleString()} (${currentDate.toISOString()})`);
+                console.log(`      Time Diff: ${Math.round(timeDiff / 1000)} seconds (${timeDiff >= -5000 && timeDiff <= checkWindow ? '✅ IN WINDOW' : '❌ OUT OF WINDOW'})`);
                 
                 // Execute if scheduled time is within last 15 seconds or next 5 seconds
                 // This ensures we catch tournaments even if check runs slightly before or after scheduled time
                 if (timeDiff >= -5000 && timeDiff <= checkWindow) {
-                    console.log(`⏰ Executing Scheduled Tournament: ${schedule.id}`);
-                    console.log(`   Scheduled Time: ${new Date(schedule.scheduledTime).toISOString()}`);
-                    console.log(`   Current Time: ${new Date(now).toISOString()}`);
+                    console.log(`⏰ [EXECUTING] Scheduled Tournament: ${schedule.id}`);
+                    console.log(`   Scheduled Time: ${scheduledDate.toISOString()}`);
+                    console.log(`   Current Time: ${currentDate.toISOString()}`);
                     console.log(`   Time Difference: ${Math.round(timeDiff / 1000)} seconds`);
                     
                     // End current tournament
+                    console.log(`   🏁 Ending current tournament: ${currentTournamentKey}`);
                     await endTournament(currentTournamentKey);
                     
                     // Create new tournament
                     const newTournamentId = `tournament_scheduled_${schedule.id}_${Date.now()}`;
                     currentTournamentKey = newTournamentId;
+                    console.log(`   ➕ Creating new tournament: ${newTournamentId}`);
                     
                     // Store custom timing
                     await redis.setex(`tournament:${newTournamentId}:duration`, Math.ceil(schedule.duration / 1000), schedule.duration.toString());
@@ -361,7 +378,8 @@ setInterval(async () => {
                         leaderboardTime: schedule.leaderboardTime
                     });
                     
-                    console.log(`✅ Scheduled Tournament Created: ${newTournamentId}`);
+                    console.log(`✅ [SUCCESS] Scheduled Tournament Created: ${newTournamentId}`);
+                    console.log(`   Duration: ${schedule.duration/60000}min | Play: ${schedule.playTime/60000}min | Leaderboard: ${schedule.leaderboardTime/60000}min`);
                     
                     // Remove from scheduled list
                     const filtered = scheduled.filter(x => {
@@ -381,11 +399,11 @@ setInterval(async () => {
                     break;
                 }
             } catch (e) {
-                console.error("Error processing schedule:", e);
+                console.error(`❌ [ERROR] Processing schedule:`, e);
             }
         }
     } catch (e) {
-        console.error("Error checking scheduled tournaments:", e);
+        console.error(`❌ [ERROR] Checking scheduled tournaments:`, e);
     }
 }, 10000); // Check every 10 seconds for better accuracy
 
@@ -641,21 +659,37 @@ async function loadTournamentState() {
 }
 
 // Start tournament check interval
+let autoCheckCount = 0;
 function startTournamentCheck() {
     if (tournamentCheckInterval) {
+        console.log(`🛑 [AUTO TOURNAMENT] Stopping previous check interval`);
         clearInterval(tournamentCheckInterval);
+        tournamentCheckInterval = null;
     }
     
+    console.log(`▶️ [AUTO TOURNAMENT] Starting check interval (enabled: ${autoTournamentEnabled})`);
+    
     tournamentCheckInterval = setInterval(async () => {
+        autoCheckCount++;
+        
         if (!autoTournamentEnabled) {
+            if (autoCheckCount % 6 === 0) { // Log every 60 seconds
+                console.log(`⏸️ [AUTO TOURNAMENT CHECK #${autoCheckCount}] Auto tournaments are DISABLED - skipping check`);
+            }
             return; // Skip if auto tournaments are disabled
         }
         
         const newKey = getTournamentKey();
         if (newKey !== currentTournamentKey) {
-            console.log(`🔄 Tournament Changed: ${currentTournamentKey} -> ${newKey}`);
+            console.log(`🔄 [AUTO TOURNAMENT] Tournament Changed: ${currentTournamentKey} -> ${newKey}`);
+            console.log(`   Current Time: ${new Date().toISOString()}`);
             await endTournament(currentTournamentKey);
             currentTournamentKey = newKey;
+            console.log(`✅ [AUTO TOURNAMENT] New tournament started: ${newKey}`);
+        } else {
+            if (autoCheckCount % 6 === 0) { // Log every 60 seconds
+                console.log(`✅ [AUTO TOURNAMENT CHECK #${autoCheckCount}] Current tournament: ${currentTournamentKey} (no change)`);
+            }
         }
     }, 10000);
 }
