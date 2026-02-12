@@ -651,6 +651,43 @@
                     }
                 }
             });
+
+            // REAL-TIME TOURNAMENT UPDATE - Server broadcasts when phase changes
+            socket.on('tu', (data) => {
+                console.log('📡 [LIVE UPDATE] Phase:', data.ph, 'TID:', data.tid);
+
+                if (data.ph === 'n' || !data.tid) {
+                    // NO TOURNAMENT
+                    hasActiveTournament = false;
+                    TrysManager.renderActionKey(false);
+                    if (tournamentInterval) {
+                        clearInterval(tournamentInterval);
+                        tournamentInterval = null;
+                    }
+                    if (nextScheduledTournament) {
+                        startScheduledCountdown(nextScheduledTournament);
+                    } else {
+                        showNoTournamentMessage();
+                    }
+                } else if (data.ph === 'l') {
+                    // LEADERBOARD PHASE
+                    hasActiveTournament = true;
+                    TrysManager.renderActionKey(false);
+                    if (tournamentInterval) {
+                        clearInterval(tournamentInterval);
+                        tournamentInterval = null;
+                    }
+                    startLeaderboardCountdown(data.ltl || 0);
+                } else if (data.ph === 'p') {
+                    // PLAYING PHASE - New tournament started!
+                    hasActiveTournament = true;
+                    stopScheduledCountdown();
+                    TrysManager.renderActionKey(true);
+                    if (data.tl && data.tl > 0) {
+                        startRealTimer(data.tl);
+                    }
+                }
+            });
         }
 
         function startRealTimer(msLeft) {

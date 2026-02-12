@@ -831,6 +831,8 @@ async function loadTournamentState() {
 
 // Start tournament check interval
 let autoCheckCount = 0;
+let lastBroadcastPhase = null; // Track last broadcast phase for real-time updates
+
 function startTournamentCheck() {
     // Stop any existing interval first
     if (tournamentCheckInterval) {
@@ -839,7 +841,6 @@ function startTournamentCheck() {
         tournamentCheckInterval = null;
     }
 
-    // Don't start interval if auto tournaments are disabled
     // Always start check interval (even if disabled) to ensure we can END tournaments
     console.log(`▶️ [AUTO TOURNAMENT] Starting permanent check interval`);
 
@@ -874,19 +875,27 @@ function startTournamentCheck() {
             }
         } else {
             // Same time slot. 
-            // Safety check: If Auto was JUST disabled mid-tournament, we usually let it finish the current slot.
-            // But if currentTournamentKey is null and Auto is Enabled (e.g. just toggled ON mid-slot), start it?
-            // Optional: Uncomment below to auto-start mid-slot if toggled ON
-            /*
-            if (autoTournamentEnabled && !currentTournamentKey) {
-                 currentTournamentKey = newKey;
-                 console.log(`✅ [AUTO RESUME] Resumed tournament mid-slot: ${newKey}`);
-            }
-            */
-
             if (autoCheckCount % 6 === 0) { // Log every 60 seconds
                 console.log(`✅ [HEARTBEAT #${autoCheckCount}] Current: ${currentTournamentKey || 'None'} | Auto: ${autoTournamentEnabled}`);
             }
+        }
+
+        // --- REAL-TIME PHASE BROADCAST ---
+        // Calculate current phase and broadcast to ALL clients if it changed
+        const currentPhase = await getTournamentPhase(currentTournamentKey);
+        if (currentPhase !== lastBroadcastPhase) {
+            lastBroadcastPhase = currentPhase;
+            const tl = await getTournamentTimeLeft(currentTournamentKey);
+            const ltl = await getLeaderboardTimeLeft(currentTournamentKey);
+
+            console.log(`📡 [BROADCAST] Phase changed to '${currentPhase}' | TID: ${currentTournamentKey || 'None'} | TL: ${tl} | LTL: ${ltl}`);
+
+            io.emit('tu', {
+                ph: currentPhase,
+                tl: tl,
+                ltl: ltl,
+                tid: currentTournamentKey || null
+            });
         }
     }, 10000);
 }
