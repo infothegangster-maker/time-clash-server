@@ -574,13 +574,23 @@
                 tbody.innerHTML = data.history.map(tournament => {
                     const date = new Date(tournament.ts);
                     const winner = tournament.winners && tournament.winners.length > 0 ? tournament.winners[0] : null;
+                    const participantCount = tournament.participantCount || (tournament.allParticipants ? tournament.allParticipants.length : 0);
+                    
+                    // Get winner info
+                    let winnerInfo = 'N/A';
+                    let winnerScore = 'N/A';
+                    if (winner) {
+                        winnerInfo = winner.u ? (winner.u.length > 20 ? winner.u.substring(0, 20) + '...' : winner.u) : 'N/A';
+                        winnerScore = winner.s ? winner.s + 'ms' : 'N/A';
+                    }
+                    
                     return `
                         <tr>
-                            <td>${tournament.id}</td>
+                            <td><strong>${tournament.id || 'N/A'}</strong></td>
                             <td class="timestamp">${date.toLocaleString()}</td>
-                            <td>${tournament.participantCount || 0}</td>
-                            <td>${winner ? (winner.u?.substring(0, 15) + '...' || 'N/A') : 'N/A'}</td>
-                            <td>${winner ? winner.s + 'ms' : 'N/A'}</td>
+                            <td><strong>${participantCount}</strong></td>
+                            <td>${winnerInfo}</td>
+                            <td><strong style="color: #FFD700;">${winnerScore}</strong></td>
                             <td>
                                 <button onclick="viewTournamentDetails('${tournament.id}')" 
                                     style="background: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">
