@@ -612,9 +612,19 @@
                 // Check if no tournament exists
                 if (data.noTournament || !data.tid) {
                     toast.style.display = 'none';
-                    showNoTournamentMessage();
+                    hasActiveTournament = false;
+                    // If no active tournament, check for scheduled tournament
+                    if (nextScheduledTournament) {
+                        startScheduledCountdown(nextScheduledTournament);
+                    } else {
+                        showNoTournamentMessage();
+                    }
                     return;
                 }
+                
+                // Mark that we have an active tournament
+                hasActiveTournament = true;
+                stopScheduledCountdown(); // Stop scheduled countdown when active tournament starts
                 
                 // Hacking.target = data.t / 1000; // Not used here
                 if (data.tl && data.tl > 0) {
@@ -624,12 +634,13 @@
                     // Show Enter button
                     TrysManager.renderActionKey(true);
                 } else {
-                    // Leaderboard time - check if there's a scheduled tournament
+                    // Leaderboard time - hide Enter button
                     toast.style.display = 'none';
                     // Hide Enter button
                     TrysManager.renderActionKey(false);
                     
-                    // Check if there's a scheduled tournament, otherwise show "No Tournament"
+                    // During leaderboard time, check if there's a scheduled tournament for after this tournament ends
+                    // But first, show leaderboard countdown for current tournament
                     if (nextScheduledTournament) {
                         startScheduledCountdown(nextScheduledTournament);
                     } else {
@@ -774,17 +785,30 @@
                 hasActiveTournament = data.hasActiveTournament || false;
                 nextScheduledTournament = data.scheduled || null;
 
-                // Only update UI if socket hasn't connected yet or if there's no active tournament
-                // Socket will handle active tournament display via 'grd' event
-                if (!socket || !socket.connected) {
-                    // Socket not connected - check tournament status
+                // Update UI based on tournament status
+                // If socket is connected, it will handle active tournament via 'grd' event
+                // But we still need to handle scheduled tournaments
+                if (socket && socket.connected) {
+                    // Socket is connected - only update if there's no active tournament
+                    // This ensures scheduled countdown continues even after socket connects
                     if (!hasActiveTournament) {
-                        // No active tournament
+                        // No active tournament - show scheduled countdown if available
                         if (nextScheduledTournament) {
-                            // Show scheduled tournament countdown
                             startScheduledCountdown(nextScheduledTournament);
                         } else {
-                            // No tournament at all
+                            // Only show "No Tournament" if socket hasn't sent any data yet
+                            // Otherwise let socket 'grd' event handle it
+                            if (!hasActiveTournament) {
+                                showNoTournamentMessage();
+                            }
+                        }
+                    }
+                } else {
+                    // Socket not connected yet - show appropriate message
+                    if (!hasActiveTournament) {
+                        if (nextScheduledTournament) {
+                            startScheduledCountdown(nextScheduledTournament);
+                        } else {
                             showNoTournamentMessage();
                         }
                     }
@@ -845,7 +869,10 @@
         // Call on Load
         fetchTournamentData();
         // Refresh tournament data every 5 seconds to check for scheduled tournaments
-        setInterval(fetchTournamentData, 5000);
+        // This ensures scheduled countdown stays updated even after socket connects
+        setInterval(() => {
+            fetchTournamentData();
+        }, 5000);
 
         // Start connection
         // startCountdown(); // Removed dummy
