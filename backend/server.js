@@ -643,19 +643,56 @@ io.on('connection', (socket) => {
             // Check if target already exists for this tournament
             const targetKey = `${currentTournamentId}_target`;
             try {
+                // Try to get existing target
                 const existingTarget = await redis.get(targetKey);
-                if (existingTarget) {
+                
+                if (existingTarget && !isNaN(parseInt(existingTarget))) {
+                    // Use existing target
                     targetTime = parseInt(existingTarget);
+                    console.log(`✅ Using existing target for ${currentTournamentId}: ${targetTime}ms`);
                 } else {
-                    // Generate new target for this tournament
+                    // Generate new target for this tournament (ONLY IF NOT EXISTS)
                     targetTime = Math.floor(Math.random() * 9000) + 1000;
-                    // Store it with tournament duration expiry (15 minutes)
-                    await redis.setex(targetKey, Math.ceil(TOURNAMENT_DURATION_MS / 1000), targetTime.toString());
+                    
+                    // Use SET with NX (only set if not exists) to prevent race conditions
+                    // This ensures only ONE user creates the target, others will retry
+                    const setResult = await redis.set(targetKey, targetTime.toString(), 'EX', Math.ceil(TOURNAMENT_DURATION_MS / 1000), 'NX');
+                    
+                    if (setResult === 'OK' || setResult === true) {
+                        // Successfully created new target
+                        console.log(`🎯 Created new target for ${currentTournamentId}: ${targetTime}ms`);
+                    } else {
+                        // Another user created it first, fetch it
+                        const retryTarget = await redis.get(targetKey);
+                        if (retryTarget && !isNaN(parseInt(retryTarget))) {
+                            targetTime = parseInt(retryTarget);
+                            console.log(`🔄 Retry: Using target created by another user: ${targetTime}ms`);
+                        } else {
+                            // Still not found, use the generated one (shouldn't happen)
+                            console.warn(`⚠️ Race condition: Using generated target ${targetTime}ms`);
+                        }
+                    }
                 }
             } catch (e) {
-                console.error("Error getting target:", e);
-                // Fallback to random if Redis fails
-                targetTime = Math.floor(Math.random() * 9000) + 1000;
+                console.error("❌ Redis Error getting target:", e);
+                // CRITICAL: Don't use random fallback - try to get from Redis again
+                try {
+                    const retryTarget = await redis.get(targetKey);
+                    if (retryTarget && !isNaN(parseInt(retryTarget))) {
+                        targetTime = parseInt(retryTarget);
+                        console.log(`✅ Retry successful: ${targetTime}ms`);
+                    } else {
+                        // Last resort: generate and hope Redis works
+                        targetTime = Math.floor(Math.random() * 9000) + 1000;
+                        await redis.setex(targetKey, Math.ceil(TOURNAMENT_DURATION_MS / 1000), targetTime.toString());
+                        console.log(`⚠️ Fallback: Generated and stored ${targetTime}ms`);
+                    }
+                } catch (retryError) {
+                    console.error("❌ Redis retry also failed:", retryError);
+                    // Only use random as absolute last resort
+                    targetTime = Math.floor(Math.random() * 9000) + 1000;
+                    console.error(`❌ CRITICAL: Using random target ${targetTime}ms - Redis unavailable`);
+                }
             }
         } else {
             // Practice mode: random target per user
