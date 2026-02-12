@@ -578,6 +578,9 @@
         const SERVER_URL = "https://time-clash-server.onrender.com";
         let socket = null;
         let tournamentInterval = null;
+        let hasActiveTournament = false;
+        let nextScheduledTournament = null;
+        let scheduledCountdownInterval = null;
 
         function connectServer() {
             const toast = document.getElementById('message-toast');
@@ -609,18 +612,9 @@
                 // Check if no tournament exists
                 if (data.noTournament || !data.tid) {
                     toast.style.display = 'none';
-                    // Check if there's a scheduled tournament - if yes, show countdown, else show "No Tournament"
-                    if (nextScheduledTournament) {
-                        startScheduledCountdown(nextScheduledTournament);
-                    } else {
-                        showNoTournamentMessage();
-                    }
+                    showNoTournamentMessage();
                     return;
                 }
-                
-                // Mark that we have an active tournament
-                hasActiveTournament = true;
-                stopScheduledCountdown();
                 
                 // Hacking.target = data.t / 1000; // Not used here
                 if (data.tl && data.tl > 0) {
@@ -630,11 +624,17 @@
                     // Show Enter button
                     TrysManager.renderActionKey(true);
                 } else {
-                    // Leaderboard time - hide Enter button, show countdown
+                    // Leaderboard time - check if there's a scheduled tournament
                     toast.style.display = 'none';
-                    startLeaderboardCountdown();
                     // Hide Enter button
                     TrysManager.renderActionKey(false);
+                    
+                    // Check if there's a scheduled tournament, otherwise show "No Tournament"
+                    if (nextScheduledTournament) {
+                        startScheduledCountdown(nextScheduledTournament);
+                    } else {
+                        showNoTournamentMessage();
+                    }
                 }
             });
         }
@@ -647,7 +647,12 @@
             
             // Don't start timer if time left is 0 or negative (leaderboard time)
             if (!msLeft || msLeft <= 0) {
-                startLeaderboardCountdown();
+                // Check if there's a scheduled tournament, otherwise show "No Tournament"
+                if (nextScheduledTournament) {
+                    startScheduledCountdown(nextScheduledTournament);
+                } else {
+                    showNoTournamentMessage();
+                }
                 return;
             }
 
@@ -655,7 +660,12 @@
 
             const updateDisplay = () => {
                 if (secondsRemaining <= 0) {
-                    startLeaderboardCountdown();
+                    // Play time ended - check if there's a scheduled tournament
+                    if (nextScheduledTournament) {
+                        startScheduledCountdown(nextScheduledTournament);
+                    } else {
+                        showNoTournamentMessage();
+                    }
                     return;
                 }
 
@@ -675,53 +685,77 @@
             tournamentInterval = setInterval(updateDisplay, 1000);
         }
 
-        function startLeaderboardCountdown() {
-            if (tournamentInterval) clearInterval(tournamentInterval);
-            stopScheduledCountdown(); // Stop scheduled countdown if running
-
-            const display = document.getElementById('countdown');
-            const LEADERBOARD_TIME_MS = 3 * 60 * 1000; // 3 minutes
-            const TOURNAMENT_DURATION_MS = 15 * 60 * 1000; // 15 minutes total
+        // Show "No Tournament" message
+        function showNoTournamentMessage() {
+            stopScheduledCountdown();
+            if (tournamentInterval) {
+                clearInterval(tournamentInterval);
+                tournamentInterval = null;
+            }
             
-            // Calculate remaining leaderboard time
-            const now = Date.now();
-            const intervalStart = Math.floor(now / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS;
-            const elapsed = now - intervalStart;
-            const leaderboardElapsed = elapsed - (12 * 60 * 1000); // Subtract 12 minutes play time
-            const leaderboardRemaining = LEADERBOARD_TIME_MS - leaderboardElapsed;
+            const display = document.getElementById('countdown');
+            if (display) {
+                display.innerHTML = `
+                    <div style="text-align: center; padding: 20px;">
+                        <div style="font-size: 1.5rem; color: #94a3b8; margin-bottom: 10px;">⏸️</div>
+                        <div style="font-size: 1.2rem; color: #94a3b8; font-weight: 600;">No Active Tournament</div>
+                        <div style="font-size: 0.9rem; color: #64748b; margin-top: 5px;">Waiting for next tournament...</div>
+                    </div>
+                `;
+            }
+        }
 
-            let secondsRemaining = Math.max(0, Math.floor(leaderboardRemaining / 1000));
+        // Start scheduled tournament countdown
+        function startScheduledCountdown(scheduled) {
+            stopScheduledCountdown();
+            if (tournamentInterval) {
+                clearInterval(tournamentInterval);
+                tournamentInterval = null;
+            }
+            
+            const display = document.getElementById('countdown');
+            if (!display || !scheduled) return;
 
-            const updateDisplay = () => {
-                if (secondsRemaining <= 0) {
-                    // Time's up - check if there's a scheduled tournament or refresh
-                    clearInterval(tournamentInterval);
-                    tournamentInterval = null;
-                    
-                    // Check for scheduled tournament after leaderboard ends
-                    if (nextScheduledTournament) {
-                        startScheduledCountdown(nextScheduledTournament);
-                    } else {
-                        // No scheduled tournament - show "No Tournament" and refresh
-                        showNoTournamentMessage();
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 2000);
-                    }
+            function updateCountdown() {
+                const now = Date.now();
+                const timeLeft = scheduled.scheduledTime - now;
+                
+                if (timeLeft <= 0) {
+                    stopScheduledCountdown();
+                    showNoTournamentMessage();
+                    // Refresh page after 2 seconds to check for new tournament
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
                     return;
                 }
 
-                const m = Math.floor(secondsRemaining / 60);
-                const s = secondsRemaining % 60;
-                const timeStr = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-
-                display.innerText = `Next tournament starting in: ${timeStr}`;
+                const minutes = Math.floor(timeLeft / 60000);
+                const seconds = Math.floor((timeLeft % 60000) / 1000);
                 
-                secondsRemaining--;
-            };
+                display.innerHTML = `
+                    <div style="text-align: center; padding: 20px;">
+                        <div style="font-size: 0.9rem; color: #60a5fa; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;">📅 Next Tournament</div>
+                        <div style="font-size: 2rem; color: #FFD700; font-weight: 700; font-family: 'Teko', sans-serif;">
+                            ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}
+                        </div>
+                        <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 5px;">
+                            ${new Date(scheduled.scheduledTime).toLocaleString()}
+                        </div>
+                    </div>
+                `;
+            }
 
-            updateDisplay(); // Immediate update
-            tournamentInterval = setInterval(updateDisplay, 1000);
+            updateCountdown();
+            scheduledCountdownInterval = setInterval(updateCountdown, 1000);
+        }
+
+        // Stop scheduled countdown
+        function stopScheduledCountdown() {
+            if (scheduledCountdownInterval) {
+                clearInterval(scheduledCountdownInterval);
+                scheduledCountdownInterval = null;
+            }
         }
 
         // --- HISTOY & DATA FETCH ---
@@ -740,16 +774,20 @@
                 hasActiveTournament = data.hasActiveTournament || false;
                 nextScheduledTournament = data.scheduled || null;
 
-                // Only show "No Tournament" if there's no active tournament AND no scheduled tournament
-                if (!hasActiveTournament && !nextScheduledTournament) {
-                    showNoTournamentMessage();
-                    stopScheduledCountdown();
-                } else if (!hasActiveTournament && nextScheduledTournament) {
-                    // No active tournament but scheduled tournament exists - show countdown
-                    startScheduledCountdown(nextScheduledTournament);
-                } else if (hasActiveTournament) {
-                    // Active tournament exists - stop scheduled countdown (socket will handle timer)
-                    stopScheduledCountdown();
+                // Only update UI if socket hasn't connected yet or if there's no active tournament
+                // Socket will handle active tournament display via 'grd' event
+                if (!socket || !socket.connected) {
+                    // Socket not connected - check tournament status
+                    if (!hasActiveTournament) {
+                        // No active tournament
+                        if (nextScheduledTournament) {
+                            // Show scheduled tournament countdown
+                            startScheduledCountdown(nextScheduledTournament);
+                        } else {
+                            // No tournament at all
+                            showNoTournamentMessage();
+                        }
+                    }
                 }
 
                 if (data.history) {
