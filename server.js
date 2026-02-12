@@ -417,6 +417,11 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // Update active user last activity
+        if (activeUsers.has(socket.id)) {
+            activeUsers.get(socket.id).lastActivity = Date.now();
+        }
+
         if (session.status !== 'running') return; // Prevent double submission
         session.status = 'finished';
 
