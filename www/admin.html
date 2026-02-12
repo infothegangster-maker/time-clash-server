@@ -342,49 +342,91 @@
         <!-- TOURNAMENT CONTROLS -->
         <div class="section">
             <div class="section-title">🎮 Tournament Controls</div>
+            
+            <!-- Auto Tournament Toggle -->
             <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <label class="toggle-switch">
                             <input type="checkbox" id="autoTournamentToggle" checked>
                             <span class="slider"></span>
                         </label>
-                        <span style="font-weight: 600;">Auto Tournaments</span>
-                        <span id="autoTournamentStatus" style="color: #94a3b8; font-size: 0.9rem;">(Enabled)</span>
+                        <span style="font-weight: 600; font-size: 1.1rem;">Auto Tournaments</span>
+                        <span id="autoTournamentStatus" style="color: #10b981; font-size: 0.9rem; font-weight: 600;">(Enabled)</span>
                     </div>
-                    <button onclick="toggleAutoTournament()" style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                        Update
-                    </button>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
-                    <div>
-                        <label style="display: block; margin-bottom: 5px; color: #94a3b8; font-size: 0.9rem;">Duration (minutes)</label>
-                        <input type="number" id="manualDuration" value="15" min="5" max="60" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; color: white;">
-                    </div>
-                    <div>
-                        <label style="display: block; margin-bottom: 5px; color: #94a3b8; font-size: 0.9rem;">Play Time (minutes)</label>
-                        <input type="number" id="manualPlayTime" value="12" min="3" max="55" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; color: white;">
-                    </div>
-                    <div>
-                        <label style="display: block; margin-bottom: 5px; color: #94a3b8; font-size: 0.9rem;">Leaderboard Time (minutes)</label>
-                        <input type="number" id="manualLeaderboardTime" value="3" min="1" max="10" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; color: white;">
-                    </div>
-                </div>
-                
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button onclick="createManualTournament()" style="background: #10b981; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                        ➕ Create Tournament Now
-                    </button>
-                    <button onclick="showScheduleModal()" style="background: #f59e0b; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                        📅 Schedule Tournament
+                    <button onclick="toggleAutoTournament()" style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                        Update Status
                     </button>
                 </div>
             </div>
             
-            <!-- Scheduled Tournaments -->
-            <div id="scheduled-tournaments" style="margin-top: 20px;">
-                <div style="font-weight: 600; margin-bottom: 10px; color: #94a3b8;">📅 Scheduled Tournaments</div>
+            <!-- Create Tournament Now -->
+            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 15px; color: #FFD700;">➕ Create Tournament Now</div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Total Duration (minutes)</label>
+                        <input type="number" id="manualDuration" value="15" min="5" max="60" step="1" 
+                            style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                            onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                            onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Play Time (minutes)</label>
+                        <input type="number" id="manualPlayTime" value="12" min="3" max="55" step="1" 
+                            style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                            onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                            onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Leaderboard Time (minutes)</label>
+                        <input type="number" id="manualLeaderboardTime" value="3" min="1" max="10" step="1" 
+                            style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                            onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                            onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                    </div>
+                </div>
+                <button onclick="createManualTournament()" 
+                    style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 1rem; transition: all 0.2s; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);"
+                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(16, 185, 129, 0.4)'"
+                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 6px rgba(16, 185, 129, 0.3)'">
+                    ➕ Create Tournament Now
+                </button>
+            </div>
+            
+            <!-- Schedule Tournament -->
+            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 15px; color: #FFD700;">📅 Schedule Tournament</div>
+                <div style="background: rgba(255, 255, 255, 0.03); padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid rgba(255, 255, 255, 0.1);">
+                    <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 10px;">ℹ️ Current tournament settings will be used automatically</div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Date</label>
+                            <input type="date" id="scheduleDate" 
+                                style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                                onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                                onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Time</label>
+                            <input type="time" id="scheduleTime" 
+                                style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                                onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                                onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                        </div>
+                    </div>
+                </div>
+                <button onclick="scheduleTournament()" 
+                    style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 1rem; transition: all 0.2s; box-shadow: 0 4px 6px rgba(245, 158, 11, 0.3);"
+                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(245, 158, 11, 0.4)'"
+                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 6px rgba(245, 158, 11, 0.3)'">
+                    📅 Schedule Tournament
+                </button>
+            </div>
+            
+            <!-- Scheduled Tournaments List -->
+            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px;">
+                <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 15px; color: #FFD700;">📅 Scheduled Tournaments</div>
                 <div id="scheduled-list" class="loading">Loading...</div>
             </div>
         </div>
