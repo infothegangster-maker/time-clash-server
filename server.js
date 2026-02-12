@@ -444,6 +444,57 @@ setInterval(async () => {
     }
 }, 10000); // Check every 10 seconds for better accuracy
 
+// API: Get Tournament Data (History + Status + Scheduled)
+// Used by Tournament Page
+fastify.get('/api/tournament-data', async (req, reply) => {
+    try {
+        const historyRaw = await redis.lrange('tournament_history', 0, 9);
+        const history = historyRaw.map(x => {
+            try {
+                return JSON.parse(x);
+            } catch (e) {
+                return null;
+            }
+        }).filter(x => x !== null);
+        
+        // Get scheduled tournaments (only upcoming ones)
+        const scheduledRaw = await redis.lrange('tournament:scheduled', 0, 99);
+        const scheduled = scheduledRaw.map(x => {
+            try {
+                return JSON.parse(x);
+            } catch (e) {
+                return null;
+            }
+        }).filter(x => x !== null && x.scheduledTime > Date.now()).sort((a, b) => a.scheduledTime - b.scheduledTime);
+        
+        // Get current tournament info
+        let timeLeft = 0;
+        let hasActiveTournament = false;
+        
+        if (currentTournamentKey) {
+            // Check if tournament exists in Redis (has participants or custom timing)
+            const participants = await redis.zrange(currentTournamentKey, 0, -1);
+            const customTiming = await getCustomTournamentTiming(currentTournamentKey);
+            
+            if ((participants && participants.length > 0) || customTiming) {
+                hasActiveTournament = true;
+                timeLeft = await getTournamentTimeLeft(currentTournamentKey);
+            }
+        }
+        
+        return {
+            currentId: currentTournamentKey,
+            hasActiveTournament: hasActiveTournament,
+            timeLeft: timeLeft,
+            history: history,
+            scheduled: scheduled.length > 0 ? scheduled[0] : null // Next scheduled tournament
+        };
+    } catch (e) {
+        console.error("Error in /api/tournament-data:", e);
+        return { error: "Failed to fetch data", history: [], scheduled: null, hasActiveTournament: false };
+    }
+});
+
 // Admin: Get Tournament History with Full Details
 fastify.get('/api/admin/tournament-history', async (req, reply) => {
     try {
