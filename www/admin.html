@@ -505,7 +505,13 @@
                 const url = `${SERVER_URL}/api/admin/current-tournament`;
                 console.log("📡 Fetching current tournament from:", url);
                 const res = await fetch(url);
+                
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                
                 const data = await res.json();
+                console.log("📊 Current Tournament Data:", data);
                 
                 if (data.error) {
                     document.getElementById('current-tournament-info').innerHTML = 
@@ -557,7 +563,13 @@
                 const url = `${SERVER_URL}/api/admin/tournament-history`;
                 console.log("📡 Fetching tournament history from:", url);
                 const res = await fetch(url);
+                
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                
                 const data = await res.json();
+                console.log("📜 Tournament History Data:", data);
                 
                 if (data.error) {
                     document.getElementById('tournament-history-body').innerHTML = 
