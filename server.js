@@ -670,10 +670,17 @@ async function loadTournamentState() {
 // Start tournament check interval
 let autoCheckCount = 0;
 function startTournamentCheck() {
+    // Stop any existing interval first
     if (tournamentCheckInterval) {
         console.log(`🛑 [AUTO TOURNAMENT] Stopping previous check interval`);
         clearInterval(tournamentCheckInterval);
         tournamentCheckInterval = null;
+    }
+    
+    // Don't start interval if auto tournaments are disabled
+    if (!autoTournamentEnabled) {
+        console.log(`⏸️ [AUTO TOURNAMENT] Auto tournaments are DISABLED - NOT starting check interval`);
+        return;
     }
     
     console.log(`▶️ [AUTO TOURNAMENT] Starting check interval (enabled: ${autoTournamentEnabled})`);
@@ -681,11 +688,17 @@ function startTournamentCheck() {
     tournamentCheckInterval = setInterval(async () => {
         autoCheckCount++;
         
+        // Double check (safety)
         if (!autoTournamentEnabled) {
             if (autoCheckCount % 6 === 0) { // Log every 60 seconds
-                console.log(`⏸️ [AUTO TOURNAMENT CHECK #${autoCheckCount}] Auto tournaments are DISABLED - skipping check`);
+                console.log(`⏸️ [AUTO TOURNAMENT CHECK #${autoCheckCount}] Auto tournaments are DISABLED - stopping interval`);
             }
-            return; // Skip if auto tournaments are disabled
+            // Stop the interval if disabled
+            if (tournamentCheckInterval) {
+                clearInterval(tournamentCheckInterval);
+                tournamentCheckInterval = null;
+            }
+            return;
         }
         
         const newKey = getTournamentKey();
