@@ -317,18 +317,29 @@ fastify.delete('/api/admin/tournament/schedule/:scheduleId', async (req, reply) 
     }
 });
 
-// Check scheduled tournaments every minute
+// Check scheduled tournaments every 10 seconds (more frequent for better accuracy)
 setInterval(async () => {
     try {
         const scheduled = await redis.lrange('tournament:scheduled', 0, 99);
+        if (!scheduled || scheduled.length === 0) {
+            return; // No scheduled tournaments
+        }
+        
         const now = Date.now();
+        const checkWindow = 15000; // 15 seconds window (check if scheduled time is within last 15 seconds or next 5 seconds)
         
         for (const item of scheduled) {
             try {
                 const schedule = JSON.parse(item);
-                if (schedule.scheduledTime <= now && schedule.scheduledTime > now - 60000) {
-                    // Time to create this tournament (within last minute)
+                const timeDiff = now - schedule.scheduledTime;
+                
+                // Execute if scheduled time is within last 15 seconds or next 5 seconds
+                // This ensures we catch tournaments even if check runs slightly before or after scheduled time
+                if (timeDiff >= -5000 && timeDiff <= checkWindow) {
                     console.log(`⏰ Executing Scheduled Tournament: ${schedule.id}`);
+                    console.log(`   Scheduled Time: ${new Date(schedule.scheduledTime).toISOString()}`);
+                    console.log(`   Current Time: ${new Date(now).toISOString()}`);
+                    console.log(`   Time Difference: ${Math.round(timeDiff / 1000)} seconds`);
                     
                     // End current tournament
                     await endTournament(currentTournamentKey);
@@ -350,15 +361,24 @@ setInterval(async () => {
                         leaderboardTime: schedule.leaderboardTime
                     });
                     
+                    console.log(`✅ Scheduled Tournament Created: ${newTournamentId}`);
+                    
                     // Remove from scheduled list
                     const filtered = scheduled.filter(x => {
-                        const s = JSON.parse(x);
-                        return s.id !== schedule.id;
+                        try {
+                            const s = JSON.parse(x);
+                            return s.id !== schedule.id;
+                        } catch (e) {
+                            return true;
+                        }
                     });
                     await redis.del('tournament:scheduled');
                     if (filtered.length > 0) {
                         await redis.rpush('tournament:scheduled', ...filtered);
                     }
+                    
+                    // Break after executing one tournament to avoid conflicts
+                    break;
                 }
             } catch (e) {
                 console.error("Error processing schedule:", e);
@@ -367,7 +387,7 @@ setInterval(async () => {
     } catch (e) {
         console.error("Error checking scheduled tournaments:", e);
     }
-}, 60000); // Check every minute
+}, 10000); // Check every 10 seconds for better accuracy
 
 // Admin: Get Tournament History with Full Details
 fastify.get('/api/admin/tournament-history', async (req, reply) => {
