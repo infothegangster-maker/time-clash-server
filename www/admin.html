@@ -421,10 +421,10 @@
     </div>
     
     <script>
-        // Use Cloudflare Worker for admin panel
+        // Use Direct Backend for admin panel (all /api/admin endpoints work here)
         const WORKER_URL = "https://timeclash.raj829266.workers.dev";
         const BACKEND_URL = "https://time-clash-server.onrender.com";
-        const SERVER_URL = WORKER_URL; // Use Cloudflare Worker
+        const SERVER_URL = BACKEND_URL; // Use Direct Backend for Admin Panel
         
         // Log which server is being used
         console.log("🔗 Admin Panel Server URL:", SERVER_URL);
