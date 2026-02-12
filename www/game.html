@@ -855,6 +855,7 @@
                     document.getElementById('best-display').innerText = `BEST: ${b}${b !== 'NA' ? 'ms' : ''}`;
 
                     // START TOURNAMENT TIMER - Only if time left > 0 (not in leaderboard time)
+                    // Only update timer if it's not already running or if significant time difference
                     if (data.tl && data.tl > 0) {
                         Game.startTournamentTimer(data.tl);
                     } else {
@@ -883,6 +884,7 @@
                 socket.on('gr', (data) => {
                     Hacking.handleServerResult(data);
                     // Sync Timer - Only if time left > 0 (not in leaderboard time)
+                    // Only update if timer is not running or needs significant sync (>2 seconds difference)
                     if (data.rem && data.rem > 0) {
                         Game.startTournamentTimer(data.rem);
                     } else {
@@ -1000,36 +1002,58 @@
             },
 
             tournamentInterval: null,
+            tournamentStartTime: null,
+            tournamentDuration: null,
             startTournamentTimer(msLeft) {
-                if (this.tournamentInterval) clearInterval(this.tournamentInterval);
-
                 const display = document.getElementById('tournament-timer');
                 
                 // Don't start timer if time left is 0 or negative (leaderboard time)
                 if (!msLeft || msLeft <= 0) {
+                    if (this.tournamentInterval) {
+                        clearInterval(this.tournamentInterval);
+                        this.tournamentInterval = null;
+                    }
                     if (display) display.innerText = "LEADERBOARD";
                     return;
                 }
 
-                let secondsRemaining = Math.floor(msLeft / 1000);
+                // Only restart timer if it's not already running or if time difference is significant (>2 seconds)
+                const currentSeconds = Math.floor(msLeft / 1000);
+                const shouldRestart = !this.tournamentInterval || 
+                                     !this.tournamentStartTime || 
+                                     Math.abs((Date.now() - this.tournamentStartTime) / 1000 - (this.tournamentDuration - currentSeconds)) > 2;
 
-                const updateDisplay = () => {
-                    if (secondsRemaining <= 0) {
-                        display.innerText = "LEADERBOARD";
+                if (shouldRestart) {
+                    if (this.tournamentInterval) {
                         clearInterval(this.tournamentInterval);
-                        // Play time ended - redirect to tournament page
-                        window.location.href = 'tournament.html';
-                        return;
+                        this.tournamentInterval = null;
                     }
 
-                    const m = Math.floor(secondsRemaining / 60);
-                    const s = secondsRemaining % 60;
-                    display.innerText = `ENDS: ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-                    secondsRemaining--;
-                };
+                    // Store start time and duration for accurate counting
+                    this.tournamentStartTime = Date.now();
+                    this.tournamentDuration = currentSeconds;
 
-                updateDisplay(); // Immediate update
-                this.tournamentInterval = setInterval(updateDisplay, 1000);
+                    const updateDisplay = () => {
+                        const elapsed = Math.floor((Date.now() - this.tournamentStartTime) / 1000);
+                        const secondsRemaining = Math.max(0, this.tournamentDuration - elapsed);
+
+                        if (secondsRemaining <= 0) {
+                            display.innerText = "LEADERBOARD";
+                            clearInterval(this.tournamentInterval);
+                            this.tournamentInterval = null;
+                            // Play time ended - redirect to tournament page
+                            window.location.href = 'tournament.html';
+                            return;
+                        }
+
+                        const m = Math.floor(secondsRemaining / 60);
+                        const s = secondsRemaining % 60;
+                        display.innerText = `ENDS: ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                    };
+
+                    updateDisplay(); // Immediate update
+                    this.tournamentInterval = setInterval(updateDisplay, 1000);
+                }
             }
         };
 
