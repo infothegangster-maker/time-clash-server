@@ -421,7 +421,10 @@
     </div>
     
     <script>
-        const SERVER_URL = "https://time-clash-server.onrender.com";
+        // Use Cloudflare Worker for admin panel
+        const WORKER_URL = "https://timeclash.raj829266.workers.dev";
+        const BACKEND_URL = "https://time-clash-server.onrender.com";
+        const SERVER_URL = WORKER_URL; // Use Cloudflare Worker
         let autoRefreshInterval = null;
         let allUsersData = [];
         let activeUsersData = [];
