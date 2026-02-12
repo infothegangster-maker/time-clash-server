@@ -34,9 +34,9 @@ fastify.get('/api/admin/firebase-active-users', async (req, reply) => {
     try {
         // Get active user IDs from socket connections
         const activeUserIds = Array.from(activeUsers.values()).map(u => u.userId);
-        
+
         console.log(`📊 Admin Request: Active Users Count = ${activeUsers.size}, User IDs = ${activeUserIds.length}`);
-        
+
         if (activeUserIds.length === 0) {
             return { count: 0, users: [], message: "No active users currently" };
         }
@@ -79,7 +79,7 @@ fastify.get('/api/admin/firebase-active-users', async (req, reply) => {
             });
 
             const users = await Promise.all(firebaseUsersPromises);
-            return { 
+            return {
                 count: users.length,
                 users: users.sort((a, b) => b.lastActivity - a.lastActivity)
             };
@@ -101,8 +101,8 @@ fastify.get('/api/admin/firebase-active-users', async (req, reply) => {
                     isGuest: !activeUser?.email
                 };
             });
-            
-            return { 
+
+            return {
                 count: users.length,
                 users: users.sort((a, b) => b.lastActivity - a.lastActivity),
                 message: "Firebase Admin not available - showing socket connection data"
@@ -110,7 +110,7 @@ fastify.get('/api/admin/firebase-active-users', async (req, reply) => {
         }
     } catch (e) {
         console.error("❌ Error fetching active Firebase users:", e);
-        return { 
+        return {
             error: e.message,
             count: 0,
             users: []
@@ -123,7 +123,7 @@ fastify.get('/api/admin/current-tournament', async (req, reply) => {
     try {
         // Use currentTournamentKey if set, otherwise return null (no active tournament)
         const currentTournamentId = currentTournamentKey || null;
-        
+
         if (!currentTournamentId) {
             return {
                 tournamentId: null,
@@ -135,7 +135,7 @@ fastify.get('/api/admin/current-tournament', async (req, reply) => {
             };
         }
         const allParticipants = await redis.zrange(currentTournamentId, 0, -1, 'WITHSCORES');
-        
+
         const participants = [];
         if (Array.isArray(allParticipants)) {
             if (allParticipants.length > 0 && typeof allParticipants[0] === 'object') {
@@ -163,7 +163,7 @@ fastify.get('/api/admin/current-tournament', async (req, reply) => {
 
         // Get time left with custom timing support
         const timeLeft = await getTournamentTimeLeft(currentTournamentId);
-        
+
         // Get custom timing if available
         const custom = await getCustomTournamentTiming(currentTournamentId);
         let playTimeLeft = 0;
@@ -173,7 +173,7 @@ fastify.get('/api/admin/current-tournament', async (req, reply) => {
         } else {
             playTimeLeft = Math.max(0, PLAY_TIME_MS - (Date.now() - Math.floor(Date.now() / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS));
         }
-        
+
         return {
             tournamentId: currentTournamentId,
             participantCount: participants.length,
@@ -197,7 +197,7 @@ fastify.get('/api/admin/tournament-status', async (req, reply) => {
                 return null;
             }
         }).filter(x => x !== null);
-        
+
         return {
             autoEnabled: autoTournamentEnabled,
             currentTournamentId: currentTournamentKey,
@@ -214,26 +214,20 @@ fastify.post('/api/admin/tournament/toggle-auto', async (req, reply) => {
     try {
         const oldState = autoTournamentEnabled;
         autoTournamentEnabled = !autoTournamentEnabled;
-        
+
         console.log(`🔄 [TOGGLE AUTO] Changing from ${oldState ? 'ENABLED' : 'DISABLED'} to ${autoTournamentEnabled ? 'ENABLED' : 'DISABLED'}`);
-        
+
         await redis.set('tournament:auto_enabled', autoTournamentEnabled.toString());
         console.log(`💾 [TOGGLE AUTO] State saved to Redis: ${autoTournamentEnabled}`);
-        
+
         if (autoTournamentEnabled) {
-            startTournamentCheck();
-            console.log("✅ [TOGGLE AUTO] Auto Tournaments ENABLED - Check interval started");
+            console.log("✅ [TOGGLE AUTO] Auto Tournaments ENABLED - Will start at next time boundary");
         } else {
-            if (tournamentCheckInterval) {
-                console.log("🛑 [TOGGLE AUTO] Stopping tournament check interval");
-                clearInterval(tournamentCheckInterval);
-                tournamentCheckInterval = null;
-            }
-            console.log("⏸️ [TOGGLE AUTO] Auto Tournaments DISABLED - Check interval stopped");
+            console.log("⏸️ [TOGGLE AUTO] Auto Tournaments DISABLED - Will stop after current tournament");
         }
-        
-        return { 
-            success: true, 
+
+        return {
+            success: true,
             autoEnabled: autoTournamentEnabled,
             message: autoTournamentEnabled ? 'Auto tournaments enabled' : 'Auto tournaments disabled'
         };
@@ -247,26 +241,26 @@ fastify.post('/api/admin/tournament/toggle-auto', async (req, reply) => {
 fastify.post('/api/admin/tournament/create', async (req, reply) => {
     try {
         const { duration, playTime, leaderboardTime } = req.body;
-        
+
         // End current tournament first
         await endTournament(currentTournamentKey);
-        
+
         // Create new tournament with custom or default timing
         const customDuration = duration || TOURNAMENT_DURATION_MS;
         const customPlayTime = playTime || PLAY_TIME_MS;
         const customLeaderboardTime = leaderboardTime || LEADERBOARD_TIME_MS;
-        
+
         // Generate new tournament ID
         const now = Date.now();
         const newTournamentId = `tournament_manual_${now}`;
-        
+
         // Set custom timing for this tournament (store in Redis)
         await redis.setex(`tournament:${newTournamentId}:duration`, Math.ceil(customDuration / 1000), customDuration.toString());
         await redis.setex(`tournament:${newTournamentId}:playTime`, Math.ceil(customDuration / 1000), customPlayTime.toString());
         await redis.setex(`tournament:${newTournamentId}:leaderboardTime`, Math.ceil(customDuration / 1000), customLeaderboardTime.toString());
-        
+
         currentTournamentKey = newTournamentId;
-        
+
         // Broadcast new tournament
         io.emit('tournament_new', {
             id: newTournamentId,
@@ -274,9 +268,9 @@ fastify.post('/api/admin/tournament/create', async (req, reply) => {
             playTime: customPlayTime,
             leaderboardTime: customLeaderboardTime
         });
-        
+
         console.log(`✅ Manual Tournament Created: ${newTournamentId}`);
-        
+
         return {
             success: true,
             tournamentId: newTournamentId,
@@ -293,11 +287,11 @@ fastify.post('/api/admin/tournament/create', async (req, reply) => {
 fastify.post('/api/admin/tournament/schedule', async (req, reply) => {
     try {
         const { scheduledTime, duration, playTime, leaderboardTime } = req.body;
-        
+
         if (!scheduledTime) {
             return { error: 'scheduledTime is required (Unix timestamp in ms)' };
         }
-        
+
         const schedule = {
             id: `schedule_${Date.now()}`,
             scheduledTime: parseInt(scheduledTime),
@@ -306,13 +300,13 @@ fastify.post('/api/admin/tournament/schedule', async (req, reply) => {
             leaderboardTime: leaderboardTime || LEADERBOARD_TIME_MS,
             createdAt: Date.now()
         };
-        
+
         // Add to scheduled list
         await redis.lpush('tournament:scheduled', JSON.stringify(schedule));
         await redis.ltrim('tournament:scheduled', 0, 99); // Keep last 100
-        
+
         console.log(`📅 Tournament Scheduled: ${new Date(parseInt(scheduledTime)).toISOString()}`);
-        
+
         return {
             success: true,
             schedule: schedule
@@ -327,7 +321,7 @@ fastify.delete('/api/admin/tournament/schedule/:scheduleId', async (req, reply) 
     try {
         const { scheduleId } = req.params;
         const scheduled = await redis.lrange('tournament:scheduled', 0, 99);
-        
+
         const filtered = scheduled.filter(x => {
             try {
                 const s = JSON.parse(x);
@@ -336,13 +330,13 @@ fastify.delete('/api/admin/tournament/schedule/:scheduleId', async (req, reply) 
                 return true;
             }
         });
-        
+
         // Replace the list
         await redis.del('tournament:scheduled');
         if (filtered.length > 0) {
             await redis.rpush('tournament:scheduled', ...filtered);
         }
-        
+
         return { success: true, message: 'Schedule deleted' };
     } catch (e) {
         return { error: e.message };
@@ -355,19 +349,19 @@ setInterval(async () => {
     try {
         scheduledCheckCount++;
         const scheduled = await redis.lrange('tournament:scheduled', 0, 99);
-        
+
         if (!scheduled || scheduled.length === 0) {
             if (scheduledCheckCount % 6 === 0) { // Log every 60 seconds
                 console.log(`🔍 [SCHEDULED CHECK #${scheduledCheckCount}] No scheduled tournaments found`);
             }
             return; // No scheduled tournaments
         }
-        
+
         const now = Date.now();
         const checkWindow = 15000; // 15 seconds window (check if scheduled time is within last 15 seconds or next 5 seconds)
-        
+
         console.log(`🔍 [SCHEDULED CHECK #${scheduledCheckCount}] Checking ${scheduled.length} scheduled tournament(s) at ${new Date(now).toISOString()}`);
-        
+
         for (const item of scheduled) {
             try {
                 const schedule = JSON.parse(item);
@@ -376,12 +370,12 @@ setInterval(async () => {
                 const currentDate = new Date(now);
                 const diffMinutes = Math.round(timeDiff / 60000);
                 const diffSeconds = Math.round(timeDiff / 1000);
-                
+
                 console.log(`   📅 Schedule ID: ${schedule.id}`);
                 console.log(`      Scheduled: ${scheduledDate.toLocaleString()} (UTC: ${scheduledDate.toISOString()})`);
                 console.log(`      Current: ${currentDate.toLocaleString()} (UTC: ${currentDate.toISOString()})`);
                 console.log(`      Time Diff: ${diffMinutes} minutes (${diffSeconds} seconds) ${timeDiff >= -5000 && timeDiff <= checkWindow ? '✅ IN WINDOW' : '❌ OUT OF WINDOW'}`);
-                
+
                 // Execute if scheduled time is within last 15 seconds or next 5 seconds
                 // This ensures we catch tournaments even if check runs slightly before or after scheduled time
                 if (timeDiff >= -5000 && timeDiff <= checkWindow) {
@@ -389,24 +383,24 @@ setInterval(async () => {
                     console.log(`   Scheduled Time: ${scheduledDate.toISOString()}`);
                     console.log(`   Current Time: ${currentDate.toISOString()}`);
                     console.log(`   Time Difference: ${Math.round(timeDiff / 1000)} seconds`);
-                    
+
                     // End current tournament
                     console.log(`   🏁 Ending current tournament: ${currentTournamentKey}`);
                     await endTournament(currentTournamentKey);
-                    
+
                     // Create new tournament
                     const tournamentStartTime = Date.now();
                     const newTournamentId = `tournament_scheduled_${schedule.id}_${tournamentStartTime}`;
                     currentTournamentKey = newTournamentId;
                     console.log(`   ➕ Creating new tournament: ${newTournamentId}`);
-                    
+
                     // Store custom timing with start time
                     const expirySeconds = Math.ceil(schedule.duration / 1000);
                     await redis.setex(`tournament:${newTournamentId}:duration`, expirySeconds, schedule.duration.toString());
                     await redis.setex(`tournament:${newTournamentId}:playTime`, expirySeconds, schedule.playTime.toString());
                     await redis.setex(`tournament:${newTournamentId}:leaderboardTime`, expirySeconds, schedule.leaderboardTime.toString());
                     await redis.setex(`tournament:${newTournamentId}:startTime`, expirySeconds, tournamentStartTime.toString());
-                    
+
                     // Broadcast
                     io.emit('tournament_new', {
                         id: newTournamentId,
@@ -414,10 +408,10 @@ setInterval(async () => {
                         playTime: schedule.playTime,
                         leaderboardTime: schedule.leaderboardTime
                     });
-                    
+
                     console.log(`✅ [SUCCESS] Scheduled Tournament Created: ${newTournamentId}`);
-                    console.log(`   Duration: ${schedule.duration/60000}min | Play: ${schedule.playTime/60000}min | Leaderboard: ${schedule.leaderboardTime/60000}min`);
-                    
+                    console.log(`   Duration: ${schedule.duration / 60000}min | Play: ${schedule.playTime / 60000}min | Leaderboard: ${schedule.leaderboardTime / 60000}min`);
+
                     // Remove from scheduled list
                     const filtered = scheduled.filter(x => {
                         try {
@@ -431,7 +425,7 @@ setInterval(async () => {
                     if (filtered.length > 0) {
                         await redis.rpush('tournament:scheduled', ...filtered);
                     }
-                    
+
                     // Break after executing one tournament to avoid conflicts
                     break;
                 }
@@ -456,7 +450,7 @@ fastify.get('/api/tournament-data', async (req, reply) => {
                 return null;
             }
         }).filter(x => x !== null);
-        
+
         // Get scheduled tournaments (only upcoming ones)
         const scheduledRaw = await redis.lrange('tournament:scheduled', 0, 99);
         const scheduled = scheduledRaw.map(x => {
@@ -466,22 +460,22 @@ fastify.get('/api/tournament-data', async (req, reply) => {
                 return null;
             }
         }).filter(x => x !== null && x.scheduledTime > Date.now()).sort((a, b) => a.scheduledTime - b.scheduledTime);
-        
+
         // Get current tournament info
         let timeLeft = 0;
         let hasActiveTournament = false;
-        
+
         if (currentTournamentKey) {
             // Check if tournament exists in Redis (has participants or custom timing)
             const participants = await redis.zrange(currentTournamentKey, 0, -1);
             const customTiming = await getCustomTournamentTiming(currentTournamentKey);
-            
+
             if ((participants && participants.length > 0) || customTiming) {
                 hasActiveTournament = true;
                 timeLeft = await getTournamentTimeLeft(currentTournamentKey);
             }
         }
-        
+
         return {
             currentId: currentTournamentKey,
             hasActiveTournament: hasActiveTournament,
@@ -499,11 +493,11 @@ fastify.get('/api/tournament-data', async (req, reply) => {
 fastify.get('/api/admin/tournament-history', async (req, reply) => {
     try {
         const historyRaw = await redis.lrange('tournament_history', 0, 49);
-        
+
         if (!historyRaw || historyRaw.length === 0) {
             return { history: [] };
         }
-        
+
         const history = historyRaw.map(x => {
             try {
                 return JSON.parse(x);
@@ -512,14 +506,14 @@ fastify.get('/api/admin/tournament-history', async (req, reply) => {
                 return null;
             }
         }).filter(x => x !== null);
-        
+
         // Get full participant list for each tournament
         const historyWithDetails = await Promise.all(history.map(async (tournament) => {
             try {
                 if (!tournament.id) {
                     return { ...tournament, participantCount: 0, allParticipants: [] };
                 }
-                
+
                 const allParticipants = await redis.zrange(tournament.id, 0, -1, 'WITHSCORES');
                 const participants = [];
                 if (Array.isArray(allParticipants)) {
@@ -605,7 +599,7 @@ async function getCustomTournamentTiming(tournamentId) {
         const playTime = await redis.get(`tournament:${tournamentId}:playTime`);
         const leaderboardTime = await redis.get(`tournament:${tournamentId}:leaderboardTime`);
         const startTime = await redis.get(`tournament:${tournamentId}:startTime`);
-        
+
         if (duration && playTime && leaderboardTime && startTime) {
             return {
                 duration: parseInt(duration),
@@ -622,33 +616,33 @@ async function getCustomTournamentTiming(tournamentId) {
 
 async function getTournamentTimeLeft(tournamentId = null) {
     const now = Date.now();
-    
+
     // If tournamentId provided, check for custom timing
     if (tournamentId) {
         const custom = await getCustomTournamentTiming(tournamentId);
         if (custom) {
             const elapsed = now - custom.startTime;
-            
+
             // If we're in leaderboard time (after play time), return 0
             if (elapsed >= custom.playTime) {
                 return 0; // Tournament ended, leaderboard time
             }
-            
+
             // Return remaining play time
             const remaining = custom.playTime - elapsed;
             return Math.max(0, remaining); // Return in ms
         }
     }
-    
+
     // Default: Find the start of current 15-minute interval
     const intervalStart = Math.floor(now / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS;
     const elapsed = now - intervalStart;
-    
+
     // If we're in winner/leaderboard time (last 3 minutes), return 0
     if (elapsed >= PLAY_TIME_MS) {
         return 0; // Tournament ended, winner/leaderboard time
     }
-    
+
     // Return remaining play time
     const remaining = PLAY_TIME_MS - elapsed;
     return remaining; // Return in ms
@@ -795,41 +789,54 @@ function startTournamentCheck() {
         clearInterval(tournamentCheckInterval);
         tournamentCheckInterval = null;
     }
-    
+
     // Don't start interval if auto tournaments are disabled
-    if (!autoTournamentEnabled) {
-        console.log(`⏸️ [AUTO TOURNAMENT] Auto tournaments are DISABLED - NOT starting check interval`);
-        return;
-    }
-    
-    console.log(`▶️ [AUTO TOURNAMENT] Starting check interval (enabled: ${autoTournamentEnabled})`);
-    
+    // Always start check interval (even if disabled) to ensure we can END tournaments
+    console.log(`▶️ [AUTO TOURNAMENT] Starting permanent check interval`);
+
+    // Clear existing to be safe
+    if (tournamentCheckInterval) clearInterval(tournamentCheckInterval);
+
     tournamentCheckInterval = setInterval(async () => {
         autoCheckCount++;
-        
-        // Double check (safety)
-        if (!autoTournamentEnabled) {
-            if (autoCheckCount % 6 === 0) { // Log every 60 seconds
-                console.log(`⏸️ [AUTO TOURNAMENT CHECK #${autoCheckCount}] Auto tournaments are DISABLED - stopping interval`);
-            }
-            // Stop the interval if disabled
-            if (tournamentCheckInterval) {
-                clearInterval(tournamentCheckInterval);
-                tournamentCheckInterval = null;
-            }
-            return;
-        }
-        
+
+        // 1. Calculate what the current tournament key SHOULD be based on time
         const newKey = getTournamentKey();
+
+        // 2. Check if we moved to a new time slot
         if (newKey !== currentTournamentKey) {
-            console.log(`🔄 [AUTO TOURNAMENT] Tournament Changed: ${currentTournamentKey} -> ${newKey}`);
+            console.log(`🔄 [TIME BOUNDARY] 15-min Slot Changed: ${currentTournamentKey || 'None'} -> ${newKey}`);
             console.log(`   Current Time: ${new Date().toISOString()}`);
-            await endTournament(currentTournamentKey);
-            currentTournamentKey = newKey;
-            console.log(`✅ [AUTO TOURNAMENT] New tournament started: ${newKey}`);
+
+            // 3. End the old tournament if it existed
+            if (currentTournamentKey) {
+                await endTournament(currentTournamentKey);
+                // Important: Clear it immediately after ending
+                currentTournamentKey = null;
+            }
+
+            // 4. Start NEW tournament ONLY if Auto is Enabled
+            if (autoTournamentEnabled) {
+                currentTournamentKey = newKey;
+                console.log(`✅ [AUTO START] Started new tournament: ${newKey}`);
+            } else {
+                console.log(`🛑 [AUTO STOP] Auto disabled - waiting for manual/scheduled or toggle.`);
+                // currentTournamentKey remains null
+            }
         } else {
+            // Same time slot. 
+            // Safety check: If Auto was JUST disabled mid-tournament, we usually let it finish the current slot.
+            // But if currentTournamentKey is null and Auto is Enabled (e.g. just toggled ON mid-slot), start it?
+            // Optional: Uncomment below to auto-start mid-slot if toggled ON
+            /*
+            if (autoTournamentEnabled && !currentTournamentKey) {
+                 currentTournamentKey = newKey;
+                 console.log(`✅ [AUTO RESUME] Resumed tournament mid-slot: ${newKey}`);
+            }
+            */
+
             if (autoCheckCount % 6 === 0) { // Log every 60 seconds
-                console.log(`✅ [AUTO TOURNAMENT CHECK #${autoCheckCount}] Current tournament: ${currentTournamentKey} (no change)`);
+                console.log(`✅ [HEARTBEAT #${autoCheckCount}] Current: ${currentTournamentKey || 'None'} | Auto: ${autoTournamentEnabled}`);
             }
         }
     }, 10000);
@@ -839,12 +846,8 @@ function startTournamentCheck() {
 console.log(`🚀 [INIT] Loading tournament state and starting check intervals...`);
 loadTournamentState().then(() => {
     console.log(`📊 [INIT] Tournament state loaded - Auto enabled: ${autoTournamentEnabled}`);
-    if (autoTournamentEnabled) {
-        startTournamentCheck();
-        console.log(`✅ [INIT] Auto tournament check interval started`);
-    } else {
-        console.log(`⏸️ [INIT] Auto tournaments disabled - NOT starting check interval`);
-    }
+    // ALWAYS start the check loop
+    startTournamentCheck();
     console.log(`✅ [INIT] Tournament management initialized`);
 });
 
@@ -957,7 +960,7 @@ io.on('connection', (socket) => {
             // Practice mode - use any tournament key for practice
             currentTournamentId = getTournamentKey();
         }
-        
+
         // Get target time for tournament - SAME NUMBER FOR ALL USERS IN ONE TOURNAMENT
         let targetTime;
         if (mode === 't') {
@@ -1025,7 +1028,7 @@ io.on('connection', (socket) => {
             lastActivity: Date.now(),
             socketId: socket.id
         });
-        
+
         console.log(`✅ Active User Tracked: ${userId} (${username}) - Total Active: ${activeUsers.size}`);
 
         // Send Game Ready Data (grd)
