@@ -149,12 +149,25 @@ fastify.get('/api/admin/current-tournament', async (req, reply) => {
             };
         });
 
+        // Get time left with custom timing support
+        const timeLeft = await getTournamentTimeLeft(currentTournamentId);
+        
+        // Get custom timing if available
+        const custom = await getCustomTournamentTiming(currentTournamentId);
+        let playTimeLeft = 0;
+        if (custom) {
+            const elapsed = Date.now() - custom.startTime;
+            playTimeLeft = Math.max(0, custom.playTime - elapsed);
+        } else {
+            playTimeLeft = Math.max(0, PLAY_TIME_MS - (Date.now() - Math.floor(Date.now() / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS));
+        }
+        
         return {
             tournamentId: currentTournamentId,
             participantCount: participants.length,
             participants: participantsWithDetails.sort((a, b) => a.score - b.score),
-            timeLeft: getTournamentTimeLeft(),
-            playTimeLeft: Math.max(0, PLAY_TIME_MS - (Date.now() - Math.floor(Date.now() / TOURNAMENT_DURATION_MS) * TOURNAMENT_DURATION_MS))
+            timeLeft: timeLeft,
+            playTimeLeft: playTimeLeft
         };
     } catch (e) {
         return { error: e.message };
