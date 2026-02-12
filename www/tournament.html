@@ -733,34 +733,9 @@
                 
                 if (timeLeft <= 0) {
                     stopScheduledCountdown();
-                    // Instead of page refresh, just fetch tournament data to check if tournament started
-                    // This provides smooth user experience without page reload
-                    display.innerHTML = `
-                        <div style="text-align: center; padding: 20px;">
-                            <div style="font-size: 0.9rem; color: #60a5fa; margin-bottom: 10px;">⏳ Tournament Starting...</div>
-                            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 5px;">Checking tournament status...</div>
-                        </div>
-                    `;
-                    
-                    // Fetch tournament data to check if tournament started
-                    fetchTournamentData();
-                    
-                    // If socket is connected, re-emit 'ig' to get latest tournament status
-                    if (socket && socket.connected) {
-                        const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
-                        const email = localStorage.getItem('tc_email') || null;
-                        const username = localStorage.getItem('tc_username') || 'Guest';
-                        const idToken = localStorage.getItem('tc_id_token') || null;
-                        
-                        socket.emit('ig', { 
-                            u: savedId,
-                            e: email,
-                            n: username,
-                            t: idToken,
-                            m: 't'
-                        });
-                    }
-                    
+                    // Tournament should have started - immediately check for active tournament
+                    // Don't reload page, instead fetch tournament data and re-emit socket event
+                    checkForActiveTournament();
                     return;
                 }
 
@@ -792,6 +767,53 @@
             }
         }
 
+        // Check for active tournament after scheduled time ends
+        async function checkForActiveTournament() {
+            // Immediately fetch tournament data to check if tournament started
+            await fetchTournamentData();
+            
+            // Also re-emit socket 'ig' event to get latest tournament status
+            if (socket && socket.connected) {
+                const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
+                const email = localStorage.getItem('tc_email') || null;
+                const username = localStorage.getItem('tc_username') || 'Guest';
+                const idToken = localStorage.getItem('tc_id_token') || null;
+                
+                socket.emit('ig', { 
+                    u: savedId,
+                    e: email,
+                    n: username,
+                    t: idToken,
+                    m: 't'
+                });
+            } else if (socket) {
+                // Socket exists but not connected - try to reconnect
+                connectServer();
+            } else {
+                // No socket - create connection
+                connectServer();
+            }
+            
+            // If still no active tournament after 1 second, check again
+            setTimeout(async () => {
+                await fetchTournamentData();
+                if (!hasActiveTournament && socket && socket.connected) {
+                    const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
+                    const email = localStorage.getItem('tc_email') || null;
+                    const username = localStorage.getItem('tc_username') || 'Guest';
+                    const idToken = localStorage.getItem('tc_id_token') || null;
+                    
+                    socket.emit('ig', { 
+                        u: savedId,
+                        e: email,
+                        n: username,
+                        t: idToken,
+                        m: 't'
+                    });
+                }
+            }, 1000);
+        }
+
         // --- HISTOY & DATA FETCH ---
         async function fetchTournamentData() {
             try {
@@ -816,16 +838,44 @@
                     if (nextScheduledTournament) {
                         startScheduledCountdown(nextScheduledTournament);
                     } else {
-                        // Only show "No Tournament" if socket hasn't connected yet
-                        // If socket is connected, let it handle the display via 'grd' event
-                        if (!socket || !socket.connected) {
+                        // No scheduled tournament - check if socket is connected
+                        // If socket is connected, re-emit 'ig' to get latest status
+                        if (socket && socket.connected) {
+                            const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
+                            const email = localStorage.getItem('tc_email') || null;
+                            const username = localStorage.getItem('tc_username') || 'Guest';
+                            const idToken = localStorage.getItem('tc_id_token') || null;
+                            
+                            socket.emit('ig', { 
+                                u: savedId,
+                                e: email,
+                                n: username,
+                                t: idToken,
+                                m: 't'
+                            });
+                        } else {
+                            // Socket not connected - show "No Tournament" message
                             showNoTournamentMessage();
                         }
                     }
                 } else {
                     // Active tournament exists - stop scheduled countdown
-                    // Socket 'grd' event will handle active tournament display
+                    // Re-emit socket 'ig' to get tournament timer data
                     stopScheduledCountdown();
+                    if (socket && socket.connected) {
+                        const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
+                        const email = localStorage.getItem('tc_email') || null;
+                        const username = localStorage.getItem('tc_username') || 'Guest';
+                        const idToken = localStorage.getItem('tc_id_token') || null;
+                        
+                        socket.emit('ig', { 
+                            u: savedId,
+                            e: email,
+                            n: username,
+                            t: idToken,
+                            m: 't'
+                        });
+                    }
                 }
 
                 if (data.history) {
@@ -882,12 +932,11 @@
 
         // Call on Load
         fetchTournamentData();
-        // Refresh tournament data every 3 seconds to check for scheduled tournaments and active tournaments
-        // This ensures scheduled countdown stays updated and tournament status is checked frequently
-        // Reduced interval to 3 seconds for better responsiveness when tournament starts
+        // Refresh tournament data every 5 seconds to check for scheduled tournaments
+        // This ensures scheduled countdown stays updated even after socket connects
         setInterval(() => {
             fetchTournamentData();
-        }, 3000);
+        }, 5000);
 
         // Start connection
         // startCountdown(); // Removed dummy
