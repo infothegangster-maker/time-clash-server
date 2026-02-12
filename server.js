@@ -161,6 +161,214 @@ fastify.get('/api/admin/current-tournament', async (req, reply) => {
     }
 });
 
+// Admin: Get Tournament Status (Auto mode, current state)
+fastify.get('/api/admin/tournament-status', async (req, reply) => {
+    try {
+        const scheduled = await redis.lrange('tournament:scheduled', 0, 99);
+        const scheduledList = scheduled.map(x => {
+            try {
+                return JSON.parse(x);
+            } catch (e) {
+                return null;
+            }
+        }).filter(x => x !== null);
+        
+        return {
+            autoEnabled: autoTournamentEnabled,
+            currentTournamentId: currentTournamentKey,
+            scheduledCount: scheduledList.length,
+            scheduled: scheduledList
+        };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Admin: Toggle Auto Tournament (Pause/Resume)
+fastify.post('/api/admin/tournament/toggle-auto', async (req, reply) => {
+    try {
+        autoTournamentEnabled = !autoTournamentEnabled;
+        await redis.set('tournament:auto_enabled', autoTournamentEnabled.toString());
+        
+        if (autoTournamentEnabled) {
+            startTournamentCheck();
+            console.log("✅ Auto Tournaments ENABLED");
+        } else {
+            if (tournamentCheckInterval) {
+                clearInterval(tournamentCheckInterval);
+                tournamentCheckInterval = null;
+            }
+            console.log("⏸️ Auto Tournaments DISABLED");
+        }
+        
+        return { 
+            success: true, 
+            autoEnabled: autoTournamentEnabled,
+            message: autoTournamentEnabled ? 'Auto tournaments enabled' : 'Auto tournaments disabled'
+        };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Admin: Create Manual Tournament
+fastify.post('/api/admin/tournament/create', async (req, reply) => {
+    try {
+        const { duration, playTime, leaderboardTime } = req.body;
+        
+        // End current tournament first
+        await endTournament(currentTournamentKey);
+        
+        // Create new tournament with custom or default timing
+        const customDuration = duration || TOURNAMENT_DURATION_MS;
+        const customPlayTime = playTime || PLAY_TIME_MS;
+        const customLeaderboardTime = leaderboardTime || LEADERBOARD_TIME_MS;
+        
+        // Generate new tournament ID
+        const now = Date.now();
+        const newTournamentId = `tournament_manual_${now}`;
+        
+        // Set custom timing for this tournament (store in Redis)
+        await redis.setex(`tournament:${newTournamentId}:duration`, Math.ceil(customDuration / 1000), customDuration.toString());
+        await redis.setex(`tournament:${newTournamentId}:playTime`, Math.ceil(customDuration / 1000), customPlayTime.toString());
+        await redis.setex(`tournament:${newTournamentId}:leaderboardTime`, Math.ceil(customDuration / 1000), customLeaderboardTime.toString());
+        
+        currentTournamentKey = newTournamentId;
+        
+        // Broadcast new tournament
+        io.emit('tournament_new', {
+            id: newTournamentId,
+            duration: customDuration,
+            playTime: customPlayTime,
+            leaderboardTime: customLeaderboardTime
+        });
+        
+        console.log(`✅ Manual Tournament Created: ${newTournamentId}`);
+        
+        return {
+            success: true,
+            tournamentId: newTournamentId,
+            duration: customDuration,
+            playTime: customPlayTime,
+            leaderboardTime: customLeaderboardTime
+        };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Admin: Schedule Tournament
+fastify.post('/api/admin/tournament/schedule', async (req, reply) => {
+    try {
+        const { scheduledTime, duration, playTime, leaderboardTime } = req.body;
+        
+        if (!scheduledTime) {
+            return { error: 'scheduledTime is required (Unix timestamp in ms)' };
+        }
+        
+        const schedule = {
+            id: `schedule_${Date.now()}`,
+            scheduledTime: parseInt(scheduledTime),
+            duration: duration || TOURNAMENT_DURATION_MS,
+            playTime: playTime || PLAY_TIME_MS,
+            leaderboardTime: leaderboardTime || LEADERBOARD_TIME_MS,
+            createdAt: Date.now()
+        };
+        
+        // Add to scheduled list
+        await redis.lpush('tournament:scheduled', JSON.stringify(schedule));
+        await redis.ltrim('tournament:scheduled', 0, 99); // Keep last 100
+        
+        console.log(`📅 Tournament Scheduled: ${new Date(parseInt(scheduledTime)).toISOString()}`);
+        
+        return {
+            success: true,
+            schedule: schedule
+        };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Admin: Delete Scheduled Tournament
+fastify.delete('/api/admin/tournament/schedule/:scheduleId', async (req, reply) => {
+    try {
+        const { scheduleId } = req.params;
+        const scheduled = await redis.lrange('tournament:scheduled', 0, 99);
+        
+        const filtered = scheduled.filter(x => {
+            try {
+                const s = JSON.parse(x);
+                return s.id !== scheduleId;
+            } catch (e) {
+                return true;
+            }
+        });
+        
+        // Replace the list
+        await redis.del('tournament:scheduled');
+        if (filtered.length > 0) {
+            await redis.rpush('tournament:scheduled', ...filtered);
+        }
+        
+        return { success: true, message: 'Schedule deleted' };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Check scheduled tournaments every minute
+setInterval(async () => {
+    try {
+        const scheduled = await redis.lrange('tournament:scheduled', 0, 99);
+        const now = Date.now();
+        
+        for (const item of scheduled) {
+            try {
+                const schedule = JSON.parse(item);
+                if (schedule.scheduledTime <= now && schedule.scheduledTime > now - 60000) {
+                    // Time to create this tournament (within last minute)
+                    console.log(`⏰ Executing Scheduled Tournament: ${schedule.id}`);
+                    
+                    // End current tournament
+                    await endTournament(currentTournamentKey);
+                    
+                    // Create new tournament
+                    const newTournamentId = `tournament_scheduled_${schedule.id}_${Date.now()}`;
+                    currentTournamentKey = newTournamentId;
+                    
+                    // Store custom timing
+                    await redis.setex(`tournament:${newTournamentId}:duration`, Math.ceil(schedule.duration / 1000), schedule.duration.toString());
+                    await redis.setex(`tournament:${newTournamentId}:playTime`, Math.ceil(schedule.duration / 1000), schedule.playTime.toString());
+                    await redis.setex(`tournament:${newTournamentId}:leaderboardTime`, Math.ceil(schedule.duration / 1000), schedule.leaderboardTime.toString());
+                    
+                    // Broadcast
+                    io.emit('tournament_new', {
+                        id: newTournamentId,
+                        duration: schedule.duration,
+                        playTime: schedule.playTime,
+                        leaderboardTime: schedule.leaderboardTime
+                    });
+                    
+                    // Remove from scheduled list
+                    const filtered = scheduled.filter(x => {
+                        const s = JSON.parse(x);
+                        return s.id !== schedule.id;
+                    });
+                    await redis.del('tournament:scheduled');
+                    if (filtered.length > 0) {
+                        await redis.rpush('tournament:scheduled', ...filtered);
+                    }
+                }
+            } catch (e) {
+                console.error("Error processing schedule:", e);
+            }
+        }
+    } catch (e) {
+        console.error("Error checking scheduled tournaments:", e);
+    }
+}, 60000); // Check every minute
+
 // Admin: Get Tournament History with Full Details
 fastify.get('/api/admin/tournament-history', async (req, reply) => {
     try {
@@ -396,16 +604,46 @@ setInterval(() => {
 
 // --- GLOBAL TOURNAMENT MANAGEMENT (Outside socket handler) ---
 let currentTournamentKey = getTournamentKey();
+let autoTournamentEnabled = true; // Auto tournament enabled by default
+let tournamentCheckInterval = null;
 
-// Tournament End Detection - Check Every 10 Seconds
-setInterval(() => {
-    const newKey = getTournamentKey();
-    if (newKey !== currentTournamentKey) {
-        console.log(`🔄 Tournament Changed: ${currentTournamentKey} -> ${newKey}`);
-        endTournament(currentTournamentKey);
-        currentTournamentKey = newKey;
+// Initialize tournament state from Redis
+async function loadTournamentState() {
+    try {
+        const state = await redis.get('tournament:auto_enabled');
+        if (state !== null) {
+            autoTournamentEnabled = state === 'true';
+            console.log(`📊 Tournament Auto Mode: ${autoTournamentEnabled ? 'ENABLED' : 'DISABLED'}`);
+        }
+    } catch (e) {
+        console.error("Error loading tournament state:", e);
     }
-}, 10000);
+}
+
+// Start tournament check interval
+function startTournamentCheck() {
+    if (tournamentCheckInterval) {
+        clearInterval(tournamentCheckInterval);
+    }
+    
+    tournamentCheckInterval = setInterval(async () => {
+        if (!autoTournamentEnabled) {
+            return; // Skip if auto tournaments are disabled
+        }
+        
+        const newKey = getTournamentKey();
+        if (newKey !== currentTournamentKey) {
+            console.log(`🔄 Tournament Changed: ${currentTournamentKey} -> ${newKey}`);
+            await endTournament(currentTournamentKey);
+            currentTournamentKey = newKey;
+        }
+    }, 10000);
+}
+
+// Initialize on startup
+loadTournamentState().then(() => {
+    startTournamentCheck();
+});
 
 // Global Tournament End Function
 async function endTournament(oldKey) {

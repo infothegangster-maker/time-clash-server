@@ -339,6 +339,56 @@
             </div>
         </div>
         
+        <!-- TOURNAMENT CONTROLS -->
+        <div class="section">
+            <div class="section-title">🎮 Tournament Controls</div>
+            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoTournamentToggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span style="font-weight: 600;">Auto Tournaments</span>
+                        <span id="autoTournamentStatus" style="color: #94a3b8; font-size: 0.9rem;">(Enabled)</span>
+                    </div>
+                    <button onclick="toggleAutoTournament()" style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                        Update
+                    </button>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #94a3b8; font-size: 0.9rem;">Duration (minutes)</label>
+                        <input type="number" id="manualDuration" value="15" min="5" max="60" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; color: white;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #94a3b8; font-size: 0.9rem;">Play Time (minutes)</label>
+                        <input type="number" id="manualPlayTime" value="12" min="3" max="55" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; color: white;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #94a3b8; font-size: 0.9rem;">Leaderboard Time (minutes)</label>
+                        <input type="number" id="manualLeaderboardTime" value="3" min="1" max="10" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; color: white;">
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button onclick="createManualTournament()" style="background: #10b981; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                        ➕ Create Tournament Now
+                    </button>
+                    <button onclick="showScheduleModal()" style="background: #f59e0b; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                        📅 Schedule Tournament
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Scheduled Tournaments -->
+            <div id="scheduled-tournaments" style="margin-top: 20px;">
+                <div style="font-weight: 600; margin-bottom: 10px; color: #94a3b8;">📅 Scheduled Tournaments</div>
+                <div id="scheduled-list" class="loading">Loading...</div>
+            </div>
+        </div>
+        
         <!-- CURRENT TOURNAMENT -->
         <div class="section">
             <div class="section-title">🏆 Current Tournament</div>
@@ -739,13 +789,189 @@
         }
         
         // Load All Data
+        // Load Tournament Status
+        async function loadTournamentStatus() {
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament-status`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    console.error("Tournament status error:", data.error);
+                    return;
+                }
+                
+                // Update auto tournament toggle
+                document.getElementById('autoTournamentToggle').checked = data.autoEnabled;
+                document.getElementById('autoTournamentStatus').textContent = data.autoEnabled ? '(Enabled)' : '(Disabled)';
+                document.getElementById('autoTournamentStatus').style.color = data.autoEnabled ? '#10b981' : '#ef4444';
+                
+                // Load scheduled tournaments
+                if (data.scheduled && data.scheduled.length > 0) {
+                    const scheduledHtml = data.scheduled.map(s => {
+                        const date = new Date(s.scheduledTime);
+                        return `
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>${date.toLocaleString()}</strong><br>
+                                    <small style="color: #94a3b8;">Duration: ${s.duration/60000}min | Play: ${s.playTime/60000}min | Leaderboard: ${s.leaderboardTime/60000}min</small>
+                                </div>
+                                <button onclick="deleteSchedule('${s.id}')" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
+                                    Delete
+                                </button>
+                            </div>
+                        `;
+                    }).join('');
+                    document.getElementById('scheduled-list').innerHTML = scheduledHtml;
+                } else {
+                    document.getElementById('scheduled-list').innerHTML = '<div style="color: #94a3b8; padding: 10px;">No scheduled tournaments</div>';
+                }
+            } catch (e) {
+                console.error("Error loading tournament status:", e);
+                document.getElementById('scheduled-list').innerHTML = `<div style="color: #ef4444;">Error: ${e.message}</div>`;
+            }
+        }
+        
+        // Toggle Auto Tournament
+        async function toggleAutoTournament() {
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament/toggle-auto`;
+                const res = await fetch(url, { method: 'POST' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                
+                document.getElementById('autoTournamentStatus').textContent = data.autoEnabled ? '(Enabled)' : '(Disabled)';
+                document.getElementById('autoTournamentStatus').style.color = data.autoEnabled ? '#10b981' : '#ef4444';
+                alert(data.message);
+                loadTournamentStatus();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+        
+        // Create Manual Tournament
+        async function createManualTournament() {
+            try {
+                const duration = parseInt(document.getElementById('manualDuration').value) * 60 * 1000;
+                const playTime = parseInt(document.getElementById('manualPlayTime').value) * 60 * 1000;
+                const leaderboardTime = parseInt(document.getElementById('manualLeaderboardTime').value) * 60 * 1000;
+                
+                if (playTime + leaderboardTime > duration) {
+                    alert('Play Time + Leaderboard Time cannot exceed Total Duration!');
+                    return;
+                }
+                
+                if (!confirm(`Create tournament with:\nDuration: ${duration/60000} minutes\nPlay Time: ${playTime/60000} minutes\nLeaderboard Time: ${leaderboardTime/60000} minutes`)) {
+                    return;
+                }
+                
+                const url = `${SERVER_URL}/api/admin/tournament/create`;
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ duration, playTime, leaderboardTime })
+                });
+                
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                
+                alert(`Tournament Created!\nID: ${data.tournamentId}`);
+                loadCurrentTournament();
+                loadTournamentStatus();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+        
+        // Show Schedule Modal
+        function showScheduleModal() {
+            const dateTime = prompt('Enter tournament date & time (YYYY-MM-DD HH:MM):\nExample: 2024-12-25 15:30');
+            if (!dateTime) return;
+            
+            const date = new Date(dateTime);
+            if (isNaN(date.getTime())) {
+                alert('Invalid date format!');
+                return;
+            }
+            
+            const scheduledTime = date.getTime();
+            if (scheduledTime < Date.now()) {
+                alert('Cannot schedule tournament in the past!');
+                return;
+            }
+            
+            const duration = parseInt(document.getElementById('manualDuration').value) * 60 * 1000;
+            const playTime = parseInt(document.getElementById('manualPlayTime').value) * 60 * 1000;
+            const leaderboardTime = parseInt(document.getElementById('manualLeaderboardTime').value) * 60 * 1000;
+            
+            scheduleTournament(scheduledTime, duration, playTime, leaderboardTime);
+        }
+        
+        // Schedule Tournament
+        async function scheduleTournament(scheduledTime, duration, playTime, leaderboardTime) {
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament/schedule`;
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scheduledTime, duration, playTime, leaderboardTime })
+                });
+                
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                
+                alert(`Tournament Scheduled!\nTime: ${new Date(scheduledTime).toLocaleString()}`);
+                loadTournamentStatus();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+        
+        // Delete Scheduled Tournament
+        async function deleteSchedule(scheduleId) {
+            if (!confirm('Delete this scheduled tournament?')) return;
+            
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament/schedule/${scheduleId}`;
+                const res = await fetch(url, { method: 'DELETE' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                
+                loadTournamentStatus();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+        
         async function loadAllData() {
             await Promise.all([
                 loadActiveUsers(),
                 loadCurrentTournament(),
                 loadTournamentHistory(),
                 loadSystemStats(),
-                loadAllUsers()
+                loadAllUsers(),
+                loadTournamentStatus()
             ]);
         }
         
