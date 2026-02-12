@@ -607,9 +607,15 @@
 
             socket.on('grd', (data) => {
                 // Hacking.target = data.t / 1000; // Not used here
-                if (data.tl) {
+                if (data.tl && data.tl > 0) {
+                    // Only start timer if time left > 0 (not in leaderboard time)
                     startRealTimer(data.tl);
                     toast.style.display = 'none';
+                } else {
+                    // Leaderboard time - hide loading, show leaderboard
+                    toast.style.display = 'none';
+                    const display = document.getElementById('countdown');
+                    if (display) display.innerText = "LEADERBOARD TIME";
                 }
             });
         }
@@ -619,11 +625,19 @@
 
             const display = document.getElementById('countdown');
             const nextTourDisplay = document.getElementById('next-tour-timer');
+            
+            // Don't start timer if time left is 0 or negative (leaderboard time)
+            if (!msLeft || msLeft <= 0) {
+                if (display) display.innerText = "LEADERBOARD TIME";
+                if (nextTourDisplay) nextTourDisplay.innerText = "00:00:00";
+                return;
+            }
+
             let secondsRemaining = Math.floor(msLeft / 1000);
 
             const updateDisplay = () => {
                 if (secondsRemaining <= 0) {
-                    display.innerText = "Ends in: 00:00:00";
+                    display.innerText = "LEADERBOARD TIME";
                     if (nextTourDisplay) nextTourDisplay.innerText = "00:00:00";
                     clearInterval(tournamentInterval);
                     return;
@@ -770,14 +784,14 @@
             renderActionKey() {
                 const area = document.getElementById('action-area');
                 // Always show Enter button - health check will be on game page
-                area.innerHTML = `
-                    <button onclick="enterTournament()" class="relative group w-full py-4 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-[Teko] text-2xl tracking-widest uppercase shadow-[0_0_20px_rgba(124,58,237,0.5)] border border-violet-400/30 overflow-hidden transition-all active:scale-95 hover:shadow-[0_0_40px_rgba(124,58,237,0.8)] z-50 pointer-events-auto cursor-pointer">
-                        <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
-                        <span class="relative z-10 flex items-center justify-center gap-2">
+                    area.innerHTML = `
+                        <button onclick="enterTournament()" class="relative group w-full py-4 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-[Teko] text-2xl tracking-widest uppercase shadow-[0_0_20px_rgba(124,58,237,0.5)] border border-violet-400/30 overflow-hidden transition-all active:scale-95 hover:shadow-[0_0_40px_rgba(124,58,237,0.8)] z-50 pointer-events-auto cursor-pointer">
+                            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+                            <span class="relative z-10 flex items-center justify-center gap-2">
                             ENTER ARENA
-                        </span>
-                    </button>
-                `;
+                            </span>
+                        </button>
+                    `;
             },
 
             // SEAMLESS AD BREAK OVERLAY

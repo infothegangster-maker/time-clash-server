@@ -854,8 +854,14 @@
                     document.getElementById('rank-display').innerText = `RANK: #${r}`;
                     document.getElementById('best-display').innerText = `BEST: ${b}${b !== 'NA' ? 'ms' : ''}`;
 
-                    // START TOURNAMENT TIMER
-                    if (data.tl) Game.startTournamentTimer(data.tl);
+                    // START TOURNAMENT TIMER - Only if time left > 0 (not in leaderboard time)
+                    if (data.tl && data.tl > 0) {
+                        Game.startTournamentTimer(data.tl);
+                    } else {
+                        // Leaderboard time - show ended message
+                        const timerDisplay = document.getElementById('tournament-timer');
+                        if (timerDisplay) timerDisplay.innerText = "LEADERBOARD";
+                    }
 
                     Hacking.resetView();
                     Hacking.readyToPlay();
@@ -872,8 +878,14 @@
 
                 socket.on('gr', (data) => {
                     Hacking.handleServerResult(data);
-                    // Sync Timer
-                    if (data.rem) Game.startTournamentTimer(data.rem);
+                    // Sync Timer - Only if time left > 0 (not in leaderboard time)
+                    if (data.rem && data.rem > 0) {
+                        Game.startTournamentTimer(data.rem);
+                    } else {
+                        // Leaderboard time - show ended message
+                        const timerDisplay = document.getElementById('tournament-timer');
+                        if (timerDisplay) timerDisplay.innerText = "LEADERBOARD";
+                    }
                 });
             },
 
