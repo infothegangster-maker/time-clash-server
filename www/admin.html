@@ -936,33 +936,47 @@
             }
         }
         
-        // Show Schedule Modal
-        function showScheduleModal() {
-            const dateTime = prompt('Enter tournament date & time (YYYY-MM-DD HH:MM):\nExample: 2024-12-25 15:30');
-            if (!dateTime) return;
-            
-            const date = new Date(dateTime);
-            if (isNaN(date.getTime())) {
-                alert('Invalid date format!');
-                return;
-            }
-            
-            const scheduledTime = date.getTime();
-            if (scheduledTime < Date.now()) {
-                alert('Cannot schedule tournament in the past!');
-                return;
-            }
-            
-            const duration = parseInt(document.getElementById('manualDuration').value) * 60 * 1000;
-            const playTime = parseInt(document.getElementById('manualPlayTime').value) * 60 * 1000;
-            const leaderboardTime = parseInt(document.getElementById('manualLeaderboardTime').value) * 60 * 1000;
-            
-            scheduleTournament(scheduledTime, duration, playTime, leaderboardTime);
-        }
-        
-        // Schedule Tournament
-        async function scheduleTournament(scheduledTime, duration, playTime, leaderboardTime) {
+        // Schedule Tournament (using date/time inputs)
+        async function scheduleTournament() {
             try {
+                // Get date and time from inputs
+                const dateInput = document.getElementById('scheduleDate').value;
+                const timeInput = document.getElementById('scheduleTime').value;
+                
+                if (!dateInput || !timeInput) {
+                    alert('Please select both date and time!');
+                    return;
+                }
+                
+                // Combine date and time
+                const dateTimeString = `${dateInput}T${timeInput}`;
+                const scheduledDate = new Date(dateTimeString);
+                
+                if (isNaN(scheduledDate.getTime())) {
+                    alert('Invalid date/time!');
+                    return;
+                }
+                
+                const scheduledTime = scheduledDate.getTime();
+                if (scheduledTime < Date.now()) {
+                    alert('Cannot schedule tournament in the past!');
+                    return;
+                }
+                
+                // Use current tournament settings (from manual tournament inputs)
+                const duration = parseInt(document.getElementById('manualDuration').value) * 60 * 1000;
+                const playTime = parseInt(document.getElementById('manualPlayTime').value) * 60 * 1000;
+                const leaderboardTime = parseInt(document.getElementById('manualLeaderboardTime').value) * 60 * 1000;
+                
+                if (playTime + leaderboardTime > duration) {
+                    alert('Play Time + Leaderboard Time cannot exceed Total Duration!');
+                    return;
+                }
+                
+                if (!confirm(`Schedule tournament for:\n${scheduledDate.toLocaleString()}\n\nUsing current settings:\nDuration: ${duration/60000} minutes\nPlay Time: ${playTime/60000} minutes\nLeaderboard Time: ${leaderboardTime/60000} minutes`)) {
+                    return;
+                }
+                
                 const url = `${SERVER_URL}/api/admin/tournament/schedule`;
                 const res = await fetch(url, {
                     method: 'POST',
@@ -978,7 +992,12 @@
                     return;
                 }
                 
-                alert(`Tournament Scheduled!\nTime: ${new Date(scheduledTime).toLocaleString()}`);
+                alert(`✅ Tournament Scheduled!\nTime: ${scheduledDate.toLocaleString()}`);
+                
+                // Clear inputs
+                document.getElementById('scheduleDate').value = '';
+                document.getElementById('scheduleTime').value = '';
+                
                 loadTournamentStatus();
             } catch (e) {
                 alert('Error: ' + e.message);
@@ -1041,8 +1060,19 @@
             document.body.appendChild(serverInfo);
         });
         
+        // Set default date/time to today and current time + 1 hour
+        function setDefaultScheduleTime() {
+            const now = new Date();
+            now.setHours(now.getHours() + 1); // 1 hour from now
+            const dateStr = now.toISOString().split('T')[0];
+            const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('scheduleDate').value = dateStr;
+            document.getElementById('scheduleTime').value = timeStr;
+        }
+        
         // Initial Load
         loadAllData();
+        setDefaultScheduleTime();
         
         // Start Auto Refresh if enabled
         if (document.getElementById('autoRefresh').checked) {
