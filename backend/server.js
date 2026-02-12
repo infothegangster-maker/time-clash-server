@@ -447,11 +447,26 @@ io.on('connection', (socket) => {
     // Admin: Get Firebase Users (All registered users from Firebase Auth)
     fastify.get('/api/admin/firebase-users', async (req, reply) => {
         try {
-            if (!isSecureMode || !admin) {
-                return { error: "Firebase Admin not initialized" };
+            if (!isSecureMode) {
+                console.log("⚠️ Firebase Admin not initialized - isSecureMode:", isSecureMode);
+                return { 
+                    error: "Firebase Admin not initialized. Check FIREBASE_SERVICE_ACCOUNT env variable.",
+                    isSecureMode: isSecureMode,
+                    hasAdmin: !!admin
+                };
             }
 
+            if (!admin || !admin.auth) {
+                return { 
+                    error: "Firebase Admin SDK not available",
+                    isSecureMode: isSecureMode
+                };
+            }
+
+            console.log("📋 Fetching Firebase users...");
             const listUsersResult = await admin.auth().listUsers(1000);
+            console.log(`✅ Found ${listUsersResult.users.length} Firebase users`);
+            
             const firebaseUsers = listUsersResult.users.map(user => ({
                 uid: user.uid,
                 email: user.email || 'N/A',
@@ -459,7 +474,7 @@ io.on('connection', (socket) => {
                 photoURL: user.photoURL || null,
                 emailVerified: user.emailVerified || false,
                 creationTime: user.metadata.creationTime,
-                lastSignInTime: user.metadata.lastSignInTime || 'Never',
+                lastSignInTime: user.metadata.lastSignInTime || null,
                 providerData: user.providerData.map(p => p.providerId)
             }));
 
@@ -478,72 +493,104 @@ io.on('connection', (socket) => {
                 users: usersWithStatus.sort((a, b) => {
                     // Sort: active first, then by last sign in
                     if (a.isActive !== b.isActive) return b.isActive - a.isActive;
-                    return new Date(b.lastSignInTime) - new Date(a.lastSignInTime);
+                    const aTime = a.lastSignInTime ? new Date(a.lastSignInTime).getTime() : 0;
+                    const bTime = b.lastSignInTime ? new Date(b.lastSignInTime).getTime() : 0;
+                    return bTime - aTime;
                 })
             };
         } catch (e) {
-            return { error: e.message };
+            console.error("❌ Error fetching Firebase users:", e);
+            return { 
+                error: e.message,
+                stack: e.stack,
+                isSecureMode: isSecureMode
+            };
         }
     });
 
     // Admin: Get Active Firebase Users (Real-time active users)
     fastify.get('/api/admin/firebase-active-users', async (req, reply) => {
         try {
-            if (!isSecureMode || !admin) {
-                return { error: "Firebase Admin not initialized" };
-            }
-
-            // Get active user IDs from socket connections
+            // Get active user IDs from socket connections (even if Firebase Admin not initialized)
             const activeUserIds = Array.from(activeUsers.values()).map(u => u.userId);
             
             if (activeUserIds.length === 0) {
-                return { count: 0, users: [] };
+                return { count: 0, users: [], message: "No active users currently" };
             }
 
-            // Fetch Firebase user details for active users
-            const firebaseUsersPromises = activeUserIds.map(async (uid) => {
-                try {
-                    const user = await admin.auth().getUser(uid);
-                    const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
-                    return {
-                        uid: user.uid,
-                        email: user.email || 'N/A',
-                        displayName: user.displayName || user.email?.split('@')[0] || 'Guest',
-                        photoURL: user.photoURL || null,
-                        emailVerified: user.emailVerified || false,
-                        creationTime: user.metadata.creationTime,
-                        lastSignInTime: user.metadata.lastSignInTime || 'Never',
-                        connectedAt: activeUser?.connectedAt || Date.now(),
-                        lastActivity: activeUser?.lastActivity || Date.now(),
-                        isActive: true
-                    };
-                } catch (e) {
-                    // User might not exist in Firebase (guest user)
+            // If Firebase Admin is available, fetch full user details
+            if (isSecureMode && admin && admin.auth) {
+                const firebaseUsersPromises = activeUserIds.map(async (uid) => {
+                    try {
+                        const user = await admin.auth().getUser(uid);
+                        const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
+                        return {
+                            uid: user.uid,
+                            email: user.email || 'N/A',
+                            displayName: user.displayName || user.email?.split('@')[0] || 'Guest',
+                            photoURL: user.photoURL || null,
+                            emailVerified: user.emailVerified || false,
+                            creationTime: user.metadata.creationTime,
+                            lastSignInTime: user.metadata.lastSignInTime || null,
+                            connectedAt: activeUser?.connectedAt || Date.now(),
+                            lastActivity: activeUser?.lastActivity || Date.now(),
+                            isActive: true
+                        };
+                    } catch (e) {
+                        // User might not exist in Firebase (guest user)
+                        const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
+                        return {
+                            uid: uid,
+                            email: activeUser?.email || 'Guest User',
+                            displayName: activeUser?.username || 'Guest',
+                            photoURL: null,
+                            emailVerified: false,
+                            creationTime: null,
+                            lastSignInTime: null,
+                            connectedAt: activeUser?.connectedAt || Date.now(),
+                            lastActivity: activeUser?.lastActivity || Date.now(),
+                            isActive: true,
+                            isGuest: true
+                        };
+                    }
+                });
+
+                const users = await Promise.all(firebaseUsersPromises);
+                return { 
+                    count: users.length,
+                    users: users.sort((a, b) => b.lastActivity - a.lastActivity)
+                };
+            } else {
+                // Fallback: Return active users from socket connections without Firebase details
+                const users = activeUserIds.map(uid => {
                     const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
                     return {
                         uid: uid,
-                        email: activeUser?.email || 'Guest User',
+                        email: activeUser?.email || 'N/A',
                         displayName: activeUser?.username || 'Guest',
                         photoURL: null,
                         emailVerified: false,
-                        creationTime: 'N/A',
-                        lastSignInTime: 'N/A',
+                        creationTime: null,
+                        lastSignInTime: null,
                         connectedAt: activeUser?.connectedAt || Date.now(),
                         lastActivity: activeUser?.lastActivity || Date.now(),
                         isActive: true,
-                        isGuest: true
+                        isGuest: !activeUser?.email
                     };
-                }
-            });
-
-            const users = await Promise.all(firebaseUsersPromises);
-
-            return { 
-                count: users.length,
-                users: users.sort((a, b) => b.lastActivity - a.lastActivity)
-            };
+                });
+                
+                return { 
+                    count: users.length,
+                    users: users.sort((a, b) => b.lastActivity - a.lastActivity),
+                    message: "Firebase Admin not available - showing socket connection data"
+                };
+            }
         } catch (e) {
-            return { error: e.message };
+            console.error("❌ Error fetching active Firebase users:", e);
+            return { 
+                error: e.message,
+                stack: e.stack
+            };
         }
     });
 

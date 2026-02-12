@@ -458,7 +458,8 @@
                 
                 if (data.error) {
                     document.getElementById('active-users-body').innerHTML = 
-                        `<tr><td colspan="6" class="error">Error: ${data.error}</td></tr>`;
+                        `<tr><td colspan="6" class="error">Error: ${data.error}<br><small>${data.message || ''}</small></td></tr>`;
+                    console.error('Active users error:', data);
                     return;
                 }
                 
@@ -467,17 +468,18 @@
                 
                 const tbody = document.getElementById('active-users-body');
                 if (activeUsersData.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No active users</td></tr>';
+                    const msg = data.message || 'No users currently active on the app';
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #94a3b8;">${msg}</td></tr>`;
                     return;
                 }
                 
                 tbody.innerHTML = activeUsersData.map(user => `
                     <tr>
-                        <td>${user.uid.substring(0, 20)}...</td>
-                        <td>${user.email}</td>
-                        <td>${user.displayName}</td>
-                        <td class="timestamp">${formatTime(user.connectedAt)}</td>
-                        <td class="timestamp">${formatTime(user.lastActivity)}</td>
+                        <td>${user.uid ? user.uid.substring(0, 20) + '...' : 'N/A'}</td>
+                        <td>${user.email || 'N/A'}</td>
+                        <td>${user.displayName || 'Guest'}</td>
+                        <td class="timestamp">${user.connectedAt ? formatTime(user.connectedAt) : 'N/A'}</td>
+                        <td class="timestamp">${user.lastActivity ? formatTime(user.lastActivity) : 'N/A'}</td>
                         <td>${user.isGuest ? '<span class="badge badge-warning">Guest</span>' : '<span class="badge badge-success">Active</span>'}</td>
                     </tr>
                 `).join('');
@@ -624,8 +626,10 @@
                 const data = await res.json();
                 
                 if (data.error) {
+                    const errorMsg = data.error + (data.isSecureMode !== undefined ? ` (Secure Mode: ${data.isSecureMode})` : '');
                     document.getElementById('all-users-body').innerHTML = 
-                        `<tr><td colspan="6" class="error">Error: ${data.error}</td></tr>`;
+                        `<tr><td colspan="6" class="error">Error: ${errorMsg}<br><small>Make sure FIREBASE_SERVICE_ACCOUNT is set in Render environment variables</small></td></tr>`;
+                    console.error('Firebase users error:', data);
                     return;
                 }
                 
@@ -636,18 +640,18 @@
                 
                 const tbody = document.getElementById('all-users-body');
                 if (allUsersData.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No users found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No Firebase users found. Users will appear here after they login.</td></tr>';
                     return;
                 }
                 
                 tbody.innerHTML = allUsersData.map(user => `
                     <tr>
-                        <td>${user.uid.substring(0, 20)}...</td>
-                        <td>${user.email}</td>
-                        <td>${user.displayName}</td>
+                        <td>${user.uid ? user.uid.substring(0, 20) + '...' : 'N/A'}</td>
+                        <td>${user.email || 'N/A'}</td>
+                        <td>${user.displayName || 'Guest'}</td>
                         <td>${user.isActive ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-warning">Inactive</span>'}</td>
                         <td>${user.emailVerified ? '<span class="badge badge-info">Verified</span>' : '<span class="badge badge-warning">Unverified</span>'}</td>
-                        <td class="timestamp">${user.lastSignInTime !== 'Never' ? formatTime(new Date(user.lastSignInTime).getTime()) : 'Never'}</td>
+                        <td class="timestamp">${user.lastSignInTime && user.lastSignInTime !== 'Never' ? formatTime(new Date(user.lastSignInTime).getTime()) : 'Never'}</td>
                     </tr>
                 `).join('');
             } catch (e) {
