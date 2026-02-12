@@ -481,7 +481,7 @@
                                             </div>
                                         </div>
 
-                                        <!-- Action Area (Enter Button) -->
+                                        <!-- Action Area (Enter Button / Leaderboard Countdown) -->
                                         <div id="action-area" class="mt-auto">
                                             <!-- Injected JS Button -->
                                             <div class="text-center text-violet-400 animate-pulse">Loading...</div>
@@ -608,14 +608,17 @@
             socket.on('grd', (data) => {
                 // Hacking.target = data.t / 1000; // Not used here
                 if (data.tl && data.tl > 0) {
-                    // Only start timer if time left > 0 (not in leaderboard time)
+                    // Play time - show Enter button and timer
                     startRealTimer(data.tl);
                     toast.style.display = 'none';
+                    // Show Enter button
+                    TrysManager.renderActionKey(true);
                 } else {
-                    // Leaderboard time - hide loading, show leaderboard
+                    // Leaderboard time - hide Enter button, show countdown
                     toast.style.display = 'none';
-                    const display = document.getElementById('countdown');
-                    if (display) display.innerText = "LEADERBOARD TIME";
+                    startLeaderboardCountdown();
+                    // Hide Enter button
+                    TrysManager.renderActionKey(false);
                 }
             });
         }
@@ -781,9 +784,10 @@
                 this.renderActionKey();
             },
 
-            renderActionKey() {
+            renderActionKey(showEnter = true) {
                 const area = document.getElementById('action-area');
-                // Always show Enter button - health check will be on game page
+                if (showEnter) {
+                    // Show Enter button during play time
                     area.innerHTML = `
                         <button onclick="enterTournament()" class="relative group w-full py-4 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-[Teko] text-2xl tracking-widest uppercase shadow-[0_0_20px_rgba(124,58,237,0.5)] border border-violet-400/30 overflow-hidden transition-all active:scale-95 hover:shadow-[0_0_40px_rgba(124,58,237,0.8)] z-50 pointer-events-auto cursor-pointer">
                             <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
@@ -792,6 +796,10 @@
                             </span>
                         </button>
                     `;
+                } else {
+                    // Hide Enter button during leaderboard time
+                    area.innerHTML = '';
+                }
             },
 
             // SEAMLESS AD BREAK OVERLAY
