@@ -187,18 +187,24 @@ fastify.get('/api/admin/tournament-status', async (req, reply) => {
 // Admin: Toggle Auto Tournament (Pause/Resume)
 fastify.post('/api/admin/tournament/toggle-auto', async (req, reply) => {
     try {
+        const oldState = autoTournamentEnabled;
         autoTournamentEnabled = !autoTournamentEnabled;
+        
+        console.log(`🔄 [TOGGLE AUTO] Changing from ${oldState ? 'ENABLED' : 'DISABLED'} to ${autoTournamentEnabled ? 'ENABLED' : 'DISABLED'}`);
+        
         await redis.set('tournament:auto_enabled', autoTournamentEnabled.toString());
+        console.log(`💾 [TOGGLE AUTO] State saved to Redis: ${autoTournamentEnabled}`);
         
         if (autoTournamentEnabled) {
             startTournamentCheck();
-            console.log("✅ Auto Tournaments ENABLED");
+            console.log("✅ [TOGGLE AUTO] Auto Tournaments ENABLED - Check interval started");
         } else {
             if (tournamentCheckInterval) {
+                console.log("🛑 [TOGGLE AUTO] Stopping tournament check interval");
                 clearInterval(tournamentCheckInterval);
                 tournamentCheckInterval = null;
             }
-            console.log("⏸️ Auto Tournaments DISABLED");
+            console.log("⏸️ [TOGGLE AUTO] Auto Tournaments DISABLED - Check interval stopped");
         }
         
         return { 
@@ -207,6 +213,7 @@ fastify.post('/api/admin/tournament/toggle-auto', async (req, reply) => {
             message: autoTournamentEnabled ? 'Auto tournaments enabled' : 'Auto tournaments disabled'
         };
     } catch (e) {
+        console.error(`❌ [TOGGLE AUTO ERROR]:`, e);
         return { error: e.message };
     }
 });
