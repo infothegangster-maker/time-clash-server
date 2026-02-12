@@ -940,11 +940,12 @@ io.on('connection', (socket) => {
 
         // Send Game Ready Data (grd)
         // t: target, b: best, r: rank, tl: timeLeft (ms), tid: tournamentId
+        const timeLeft = await getTournamentTimeLeft(currentTournamentId);
         socket.emit('grd', {
             t: targetTime,
             b: bestScore !== null ? bestScore : -1,
             r: currentRank !== null ? currentRank + 1 : -1,
-            tl: getTournamentTimeLeft(),
+            tl: timeLeft,
             tid: currentTournamentId
         });
     });
