@@ -988,11 +988,18 @@
                 if (this.tournamentInterval) clearInterval(this.tournamentInterval);
 
                 const display = document.getElementById('tournament-timer');
+                
+                // Don't start timer if time left is 0 or negative (leaderboard time)
+                if (!msLeft || msLeft <= 0) {
+                    if (display) display.innerText = "LEADERBOARD";
+                    return;
+                }
+
                 let secondsRemaining = Math.floor(msLeft / 1000);
 
                 const updateDisplay = () => {
                     if (secondsRemaining <= 0) {
-                        display.innerText = "ENDS: 00:00";
+                        display.innerText = "LEADERBOARD";
                         clearInterval(this.tournamentInterval);
                         return;
                     }
