@@ -860,6 +860,7 @@ async function loadTournamentState() {
 // Start tournament check interval
 let autoCheckCount = 0;
 let lastBroadcastPhase = null; // Track last broadcast phase for real-time updates
+let lastArchivedTournament = null; // Track which tournament we already archived to Supabase
 
 function startTournamentCheck() {
     // Stop any existing interval first
@@ -892,7 +893,7 @@ function startTournamentCheck() {
                     const totalDuration = custom.playTime + (custom.leaderboardTime || (TOURNAMENT_DURATION_MS - custom.playTime));
 
                     if (elapsed >= totalDuration) {
-                        // Custom tournament has EXPIRED
+                        // Custom tournament has EXPIRED (leaderboard time also over)
                         console.log(`🏁 [CUSTOM TOURNAMENT ENDED] ${currentTournamentKey} (elapsed: ${Math.round(elapsed / 1000)}s / total: ${Math.round(totalDuration / 1000)}s)`);
                         await endTournament(currentTournamentKey);
                         currentTournamentKey = null;
@@ -962,6 +963,7 @@ function startTournamentCheck() {
         // Calculate current phase and broadcast to ALL clients if it changed
         const currentPhase = await getTournamentPhase(currentTournamentKey);
         if (currentPhase !== lastBroadcastPhase) {
+            const previousPhase = lastBroadcastPhase;
             lastBroadcastPhase = currentPhase;
             const tl = await getTournamentTimeLeft(currentTournamentKey);
             const ltl = await getLeaderboardTimeLeft(currentTournamentKey);
@@ -974,6 +976,47 @@ function startTournamentCheck() {
                 ltl: ltl,
                 tid: currentTournamentKey || null
             });
+
+            // --- ARCHIVE TO SUPABASE WHEN PLAY TIME ENDS ---
+            // When phase transitions from 'p' (play) to 'l' (leaderboard),
+            // that means play time is over → archive the tournament data NOW
+            if (previousPhase === 'p' && currentPhase === 'l' && currentTournamentKey && lastArchivedTournament !== currentTournamentKey) {
+                lastArchivedTournament = currentTournamentKey;
+                console.log(`🗄️ [PLAY TIME ENDED] Archiving tournament to Supabase: ${currentTournamentKey}`);
+
+                // Get winners for the archive
+                try {
+                    const top3 = await redis.zrange(currentTournamentKey, 0, 2, 'WITHSCORES');
+                    const winners = [];
+                    if (Array.isArray(top3)) {
+                        if (top3.length > 0 && typeof top3[0] === 'object') {
+                            top3.forEach(x => winners.push({ u: x.member, s: x.score }));
+                        } else {
+                            for (let i = 0; i < top3.length; i += 2) {
+                                winners.push({ u: top3[i], s: top3[i + 1] });
+                            }
+                        }
+                    }
+                    // Resolve display names
+                    for (let w of winners) {
+                        try {
+                            const meta = await redis.hgetall(`user_meta:${w.u}`);
+                            if (meta && meta.username) { w.n = meta.username; w.e = meta.email || ''; }
+                        } catch (e) { /* ignore */ }
+                        if (!w.n) {
+                            const activeUser = Array.from(activeUsers.values()).find(u => u.userId === w.u);
+                            if (activeUser) { w.n = activeUser.username; w.e = activeUser.email || ''; }
+                        }
+                        if (!w.n) w.n = w.u;
+                    }
+
+                    archiveTournamentToSupabase(currentTournamentKey, winners).catch(e => {
+                        console.error("❌ Supabase Archive Error:", e);
+                    });
+                } catch (e) {
+                    console.error("❌ Error preparing archive at play time end:", e);
+                }
+            }
         }
     }, 10000);
 }
@@ -1048,10 +1091,14 @@ async function endTournament(oldKey) {
 
         console.log(`✅ Tournament Archived: ${oldKey} with ${winners.length} winners`);
 
-        // 4. PERSIST to Supabase (async, non-blocking)
-        archiveTournamentToSupabase(oldKey, winners).catch(e => {
-            console.error("❌ Supabase Archive Error:", e);
-        });
+        // 4. PERSIST to Supabase (only if not already archived at play time end)
+        if (lastArchivedTournament !== oldKey) {
+            archiveTournamentToSupabase(oldKey, winners).catch(e => {
+                console.error("❌ Supabase Archive Error:", e);
+            });
+        } else {
+            console.log(`🗄️ [SUPABASE] Already archived at play time end, skipping: ${oldKey}`);
+        }
 
     } catch (e) {
         console.error("❌ Error Ending Tournament:", e);
