@@ -829,8 +829,8 @@
                     const email = localStorage.getItem('tc_email') || null;
                     const username = localStorage.getItem('tc_username') || 'Guest';
                     const idToken = localStorage.getItem('tc_id_token') || null;
-                    
-                    socket.emit('ig', { 
+
+                    socket.emit('ig', {
                         u: savedId,
                         e: email,
                         n: username,
@@ -855,7 +855,6 @@
                     document.getElementById('best-display').innerText = `BEST: ${b}${b !== 'NA' ? 'ms' : ''}`;
 
                     // START TOURNAMENT TIMER - Only if time left > 0 (not in leaderboard time)
-                    // Only update timer if it's not already running or if significant time difference
                     if (data.tl && data.tl > 0) {
                         Game.startTournamentTimer(data.tl);
                     } else {
@@ -884,7 +883,6 @@
                 socket.on('gr', (data) => {
                     Hacking.handleServerResult(data);
                     // Sync Timer - Only if time left > 0 (not in leaderboard time)
-                    // Only update if timer is not running or needs significant sync (>2 seconds difference)
                     if (data.rem && data.rem > 0) {
                         Game.startTournamentTimer(data.rem);
                     } else {
@@ -967,8 +965,8 @@
                 const email = localStorage.getItem('tc_email') || null;
                 const username = localStorage.getItem('tc_username') || 'Guest';
                 const idToken = localStorage.getItem('tc_id_token') || null;
-                
-                socket.emit('ig', { 
+
+                socket.emit('ig', {
                     u: savedId,
                     e: email,
                     n: username,
@@ -1002,58 +1000,36 @@
             },
 
             tournamentInterval: null,
-            tournamentStartTime: null,
-            tournamentDuration: null,
             startTournamentTimer(msLeft) {
+                if (this.tournamentInterval) clearInterval(this.tournamentInterval);
+
                 const display = document.getElementById('tournament-timer');
-                
+
                 // Don't start timer if time left is 0 or negative (leaderboard time)
                 if (!msLeft || msLeft <= 0) {
-                    if (this.tournamentInterval) {
-                        clearInterval(this.tournamentInterval);
-                        this.tournamentInterval = null;
-                    }
                     if (display) display.innerText = "LEADERBOARD";
                     return;
                 }
 
-                // Only restart timer if it's not already running or if time difference is significant (>2 seconds)
-                const currentSeconds = Math.floor(msLeft / 1000);
-                const shouldRestart = !this.tournamentInterval || 
-                                     !this.tournamentStartTime || 
-                                     Math.abs((Date.now() - this.tournamentStartTime) / 1000 - (this.tournamentDuration - currentSeconds)) > 2;
+                let secondsRemaining = Math.floor(msLeft / 1000);
 
-                if (shouldRestart) {
-                    if (this.tournamentInterval) {
+                const updateDisplay = () => {
+                    if (secondsRemaining <= 0) {
+                        display.innerText = "LEADERBOARD";
                         clearInterval(this.tournamentInterval);
-                        this.tournamentInterval = null;
+                        // Play time ended - redirect to tournament page
+                        window.location.href = 'tournament.html';
+                        return;
                     }
 
-                    // Store start time and duration for accurate counting
-                    this.tournamentStartTime = Date.now();
-                    this.tournamentDuration = currentSeconds;
+                    const m = Math.floor(secondsRemaining / 60);
+                    const s = secondsRemaining % 60;
+                    display.innerText = `ENDS: ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                    secondsRemaining--;
+                };
 
-                    const updateDisplay = () => {
-                        const elapsed = Math.floor((Date.now() - this.tournamentStartTime) / 1000);
-                        const secondsRemaining = Math.max(0, this.tournamentDuration - elapsed);
-
-                        if (secondsRemaining <= 0) {
-                            display.innerText = "LEADERBOARD";
-                            clearInterval(this.tournamentInterval);
-                            this.tournamentInterval = null;
-                            // Play time ended - redirect to tournament page
-                            window.location.href = 'tournament.html';
-                            return;
-                        }
-
-                        const m = Math.floor(secondsRemaining / 60);
-                        const s = secondsRemaining % 60;
-                        display.innerText = `ENDS: ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-                    };
-
-                    updateDisplay(); // Immediate update
-                    this.tournamentInterval = setInterval(updateDisplay, 1000);
-                }
+                updateDisplay(); // Immediate update
+                this.tournamentInterval = setInterval(updateDisplay, 1000);
             }
         };
 
@@ -1147,21 +1123,41 @@
 
             handleServerResult(data) {
                 const diffMs = data.d;
-                const playerTimeStr = Game.formatTime(data.ft);
-                const targetStr = Game.formatTime(data.tt);
+                const playerTimeMs = data.ft;
+                const targetMs = data.tt;
+                const playerTimeStr = Game.formatTime(playerTimeMs);
+                const targetStr = Game.formatTime(targetMs);
                 const rank = data.r;
                 const bestScore = data.bs;
                 const newRecord = data.nr === 1;
                 const isWin = data.w === 1;
+                const isExact = diffMs === 0;
 
                 this.state = 'IDLE';
                 this.elements.displayTimer.innerText = playerTimeStr;
 
                 if (rank) document.getElementById('rank-display').innerText = `RANK: #${rank}`;
-                if (bestScore) document.getElementById('best-display').innerText = `BEST: ${bestScore}ms`;
+                if (bestScore !== null && bestScore !== undefined) {
+                    document.getElementById('best-display').innerText = bestScore === 0 ? `BEST: EXACT!` : `BEST: ${bestScore}ms`;
+                }
 
-                if (isWin) {
+                if (isExact) {
+                    // 🎯 EXACT MATCH!
                     this.elements.displayTimer.style.color = "#22c55e";
+                    this.elements.diffBadge.style.display = "inline-block";
+                    this.elements.diffBadge.innerText = "🎯 EXACT!";
+                    this.elements.diffBadge.style.background = "linear-gradient(135deg, #22c55e, #16a34a)";
+                    this.elements.diffBadge.style.color = "#fff";
+                    this.elements.diffBadge.style.fontSize = "1.2rem";
+                    this.elements.diffBadge.classList.add('new-record-anim');
+
+                    this.elements.timerBox.style.borderColor = "#22c55e";
+
+                    // Show target & actual in status
+                    this.elements.status.innerHTML = `🎯 <b style="color:#22c55e;font-size:1.3rem;">PERFECT MATCH!</b><br>` +
+                        `<span style="color:#94a3b8">Target: <b style="color:#FFD700">${targetStr}s</b> | You: <b style="color:#22c55e">${playerTimeStr}s</b></span>`;
+
+                    // Also show jackpot reward
                     const rewards = [
                         { type: "CASH", val: "₹1,00,000" },
                         { type: "VOUCHER", val: "₹50,000 Amazon" },
@@ -1170,14 +1166,24 @@
                     const reward = rewards[Math.floor(Math.random() * rewards.length)];
                     Game.finishLevel(true, "", reward.type, reward.val);
                 } else {
-                    // Handle Loss
+                    // Not exact - show difference
 
                     if (diffMs < Game.bestMiss) Game.bestMiss = diffMs;
 
                     this.elements.displayTimer.innerHTML = Game.colorizeDigits(targetStr, playerTimeStr);
 
                     this.elements.diffBadge.style.display = "inline-block";
-                    this.elements.diffBadge.innerText = `OFF BY ${diffMs}ms`;
+                    // Reset any previous exact-match styling
+                    this.elements.diffBadge.style.background = "";
+                    this.elements.diffBadge.style.color = "";
+                    this.elements.diffBadge.style.fontSize = "";
+
+                    if (newRecord) {
+                        this.elements.diffBadge.classList.add('new-record-anim');
+                        this.elements.diffBadge.innerText = `NEW BEST: ${diffMs}ms!`;
+                    } else {
+                        this.elements.diffBadge.innerText = `OFF BY ${diffMs}ms`;
+                    }
 
                     this.elements.timerBox.style.borderColor = "#ef4444";
                     this.elements.timerBox.classList.add('pulse');
@@ -1187,21 +1193,22 @@
                     this.elements.btn.className = "btn retry";
                     this.elements.btn.disabled = false;
 
-                    // Specific logic for message if needed?
-                    let msg = "";
+                    // Show target & actual time + motivational message
+                    let msg = `<span style="color:#94a3b8;font-size:0.9rem;">Target: <b style="color:#FFD700">${targetStr}s</b> | You: <b style="color:#e2e8f0">${playerTimeStr}s</b></span><br>`;
                     if (newRecord) {
-                        msg = `🔥 NEW HIGH SCORE! 🔥<br><b>You jumped to Rank #${rank}!</b>`;
-                        this.elements.diffBadge.classList.add('new-record-anim');
-                        this.elements.diffBadge.innerText = `NEW BEST: ${diffMs}ms!`;
-                    } else if (diffMs < 10) {
-                        msg = `😱 OFF BY A WHISKER!<br><b>Just ${diffMs}ms difference!</b>`;
+                        msg += `🔥 <b style="color:#FFD700">NEW HIGH SCORE!</b> Rank #${rank}!`;
+                    } else if (diffMs < 5) {
+                        msg += `😱 <b>SO CLOSE!</b> Just ${diffMs}ms off!`;
+                    } else if (diffMs < 20) {
+                        msg += `💪 <b>Almost there!</b> ${diffMs}ms difference`;
                     } else {
-                        msg = `💪 Getting closer!<br><b>Watch the last digit carefully!</b>`;
+                        msg += `⏱️ Off by <b>${diffMs}ms</b> — watch the last digit!`;
                     }
                     this.elements.status.innerHTML = msg;
                     this.elements.status.style.color = newRecord ? "#FFD700" : "#ef4444";
                 }
             }
+
         };
 
         Game.init();
