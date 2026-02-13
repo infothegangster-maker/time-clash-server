@@ -839,18 +839,38 @@
                     return;
                 }
 
-                const minutes = Math.floor(timeLeft / 60000);
+                const hours = Math.floor(timeLeft / 3600000);
+                const minutes = Math.floor((timeLeft % 3600000) / 60000);
                 const seconds = Math.floor((timeLeft % 60000) / 1000);
+
+                // Check if it's a daily tournament
+                const isDaily = scheduled.type === 'daily';
+                const tournamentLabel = isDaily ? '📆 Daily Tournament' : '📅 Next Tournament';
+                const timeDisplay = hours > 0 
+                    ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+                    : `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+                let timeInfo = '';
+                if (isDaily) {
+                    const scheduledDate = new Date(scheduled.scheduledTime);
+                    const isToday = scheduledDate.toDateString() === new Date().toDateString();
+                    timeInfo = isToday 
+                        ? `Today at ${scheduled.time}` 
+                        : `Tomorrow at ${scheduled.time}`;
+                } else {
+                    timeInfo = new Date(scheduled.scheduledTime).toLocaleString();
+                }
 
                 display.innerHTML = `
                     <div style="text-align: center; padding: 20px;">
-                        <div style="font-size: 0.9rem; color: #60a5fa; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;">📅 Next Tournament</div>
+                        <div style="font-size: 0.9rem; color: #60a5fa; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;">${tournamentLabel}</div>
                         <div style="font-size: 2rem; color: #FFD700; font-weight: 700; font-family: 'Teko', sans-serif;">
-                            ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}
+                            ${timeDisplay}
                         </div>
                         <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 5px;">
-                            ${new Date(scheduled.scheduledTime).toLocaleString()}
+                            ${timeInfo}
                         </div>
+                        ${isDaily ? `<div style="font-size: 0.75rem; color: #64748b; margin-top: 3px;">Repeats daily at ${scheduled.time}</div>` : ''}
                     </div>
                 `;
             }

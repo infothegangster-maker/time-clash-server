@@ -640,7 +640,7 @@ setInterval(async () => {
     }
 }, 10000); // Check every 10 seconds for better accuracy
 
-// API: Get Tournament Data (History + Status + Scheduled)
+// API: Get Tournament Data (History + Status + Scheduled + Daily)
 // Used by Tournament Page
 fastify.get('/api/tournament-data', async (req, reply) => {
     try {
@@ -663,6 +663,48 @@ fastify.get('/api/tournament-data', async (req, reply) => {
             }
         }).filter(x => x !== null && x.scheduledTime > Date.now()).sort((a, b) => a.scheduledTime - b.scheduledTime);
 
+        // Get daily schedules and calculate next tournament time
+        const dailySchedulesRaw = await redis.lrange('tournament:daily-schedules', 0, 99);
+        const dailySchedules = dailySchedulesRaw.map(x => {
+            try {
+                return JSON.parse(x);
+            } catch (e) {
+                return null;
+            }
+        }).filter(x => x !== null);
+
+        // Calculate next daily tournament time
+        let nextDailyTournament = null;
+        if (dailySchedules.length > 0) {
+            const now = Date.now();
+            const today = new Date(now);
+            
+            // Find the next daily tournament time (today or tomorrow)
+            const nextTimes = dailySchedules.map(daily => {
+                const [hours, minutes] = daily.time.split(':').map(Number);
+                
+                // Today's time
+                const todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes, 0, 0);
+                const todayTimestamp = todayTime.getTime();
+                
+                // If today's time has passed, use tomorrow's time
+                const scheduledTime = todayTimestamp > now ? todayTimestamp : todayTimestamp + 86400000; // Add 24 hours
+                
+                return {
+                    id: daily.id,
+                    scheduledTime: scheduledTime,
+                    playTime: daily.playTime * 60 * 1000,
+                    leaderboardTime: daily.leaderboardTime * 60 * 1000,
+                    duration: (daily.playTime + daily.leaderboardTime) * 60 * 1000,
+                    type: 'daily',
+                    time: daily.time
+                };
+            });
+            
+            // Get the earliest next daily tournament
+            nextDailyTournament = nextTimes.sort((a, b) => a.scheduledTime - b.scheduledTime)[0];
+        }
+
         // Get current tournament info
         let timeLeft = 0;
         let hasActiveTournament = false;
@@ -678,12 +720,25 @@ fastify.get('/api/tournament-data', async (req, reply) => {
             }
         }
 
+        // Determine the next tournament (scheduled or daily, whichever is earlier)
+        let nextTournament = null;
+        if (scheduled.length > 0 && nextDailyTournament) {
+            // Compare scheduled vs daily, pick the earlier one
+            nextTournament = scheduled[0].scheduledTime < nextDailyTournament.scheduledTime 
+                ? scheduled[0] 
+                : nextDailyTournament;
+        } else if (scheduled.length > 0) {
+            nextTournament = scheduled[0];
+        } else if (nextDailyTournament) {
+            nextTournament = nextDailyTournament;
+        }
+
         return {
             currentId: currentTournamentKey,
             hasActiveTournament: hasActiveTournament,
             timeLeft: timeLeft,
             history: history,
-            scheduled: scheduled.length > 0 ? scheduled[0] : null // Next scheduled tournament
+            scheduled: nextTournament // Next tournament (scheduled or daily)
         };
     } catch (e) {
         console.error("Error in /api/tournament-data:", e);
