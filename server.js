@@ -865,33 +865,83 @@ function startTournamentCheck() {
     tournamentCheckInterval = setInterval(async () => {
         autoCheckCount++;
 
-        // 1. Calculate what the current tournament key SHOULD be based on time
-        const newKey = getTournamentKey();
+        // Check if current tournament is a CUSTOM (scheduled/manual) tournament
+        const isCustomTournament = currentTournamentKey &&
+            (currentTournamentKey.includes('_scheduled_') || currentTournamentKey.includes('_manual_'));
 
-        // 2. Check if we moved to a new time slot
-        if (newKey !== currentTournamentKey) {
-            console.log(`🔄 [TIME BOUNDARY] 15-min Slot Changed: ${currentTournamentKey || 'None'} -> ${newKey}`);
-            console.log(`   Current Time: ${new Date().toISOString()}`);
+        if (isCustomTournament) {
+            // --- CUSTOM TOURNAMENT HANDLING ---
+            // Don't compare with auto-generated key; check if custom tournament has expired
+            try {
+                const custom = await getCustomTournamentTiming(currentTournamentKey);
+                if (custom) {
+                    const elapsed = Date.now() - custom.startTime;
+                    const totalDuration = custom.playTime + (custom.leaderboardTime || (TOURNAMENT_DURATION_MS - custom.playTime));
 
-            // 3. End the old tournament if it existed
-            if (currentTournamentKey) {
-                await endTournament(currentTournamentKey);
-                // Important: Clear it immediately after ending
-                currentTournamentKey = null;
-            }
+                    if (elapsed >= totalDuration) {
+                        // Custom tournament has EXPIRED
+                        console.log(`🏁 [CUSTOM TOURNAMENT ENDED] ${currentTournamentKey} (elapsed: ${Math.round(elapsed / 1000)}s / total: ${Math.round(totalDuration / 1000)}s)`);
+                        await endTournament(currentTournamentKey);
+                        currentTournamentKey = null;
 
-            // 4. Start NEW tournament ONLY if Auto is Enabled
-            if (autoTournamentEnabled) {
-                currentTournamentKey = newKey;
-                console.log(`✅ [AUTO START] Started new tournament: ${newKey}`);
-            } else {
-                console.log(`🛑 [AUTO STOP] Auto disabled - waiting for manual/scheduled or toggle.`);
-                // currentTournamentKey remains null
+                        // If auto is enabled, start auto tournament
+                        if (autoTournamentEnabled) {
+                            currentTournamentKey = getTournamentKey();
+                            console.log(`✅ [AUTO RESUME] Started auto tournament after custom ended: ${currentTournamentKey}`);
+                        } else {
+                            console.log(`🛑 [CUSTOM ENDED] Auto disabled - no new tournament created`);
+                        }
+                    } else {
+                        // Custom tournament still running
+                        if (autoCheckCount % 6 === 0) {
+                            const remaining = totalDuration - elapsed;
+                            console.log(`✅ [HEARTBEAT #${autoCheckCount}] Custom Tournament: ${currentTournamentKey} | Remaining: ${Math.round(remaining / 1000)}s`);
+                        }
+                    }
+                } else {
+                    // Custom timing data missing from Redis (expired TTL) - tournament is over
+                    console.log(`⚠️ [CUSTOM TOURNAMENT] Timing data expired for ${currentTournamentKey} - ending tournament`);
+                    await endTournament(currentTournamentKey);
+                    currentTournamentKey = null;
+
+                    if (autoTournamentEnabled) {
+                        currentTournamentKey = getTournamentKey();
+                        console.log(`✅ [AUTO RESUME] Started auto tournament: ${currentTournamentKey}`);
+                    }
+                }
+            } catch (e) {
+                console.error(`❌ [CUSTOM TOURNAMENT CHECK ERROR]:`, e);
             }
         } else {
-            // Same time slot. 
-            if (autoCheckCount % 6 === 0) { // Log every 60 seconds
-                console.log(`✅ [HEARTBEAT #${autoCheckCount}] Current: ${currentTournamentKey || 'None'} | Auto: ${autoTournamentEnabled}`);
+            // --- AUTO TOURNAMENT HANDLING (original logic) ---
+            // 1. Calculate what the current tournament key SHOULD be based on time
+            const newKey = getTournamentKey();
+
+            // 2. Check if we moved to a new time slot
+            if (newKey !== currentTournamentKey) {
+                console.log(`🔄 [TIME BOUNDARY] 15-min Slot Changed: ${currentTournamentKey || 'None'} -> ${newKey}`);
+                console.log(`   Current Time: ${new Date().toISOString()}`);
+
+                // 3. End the old tournament if it existed
+                if (currentTournamentKey) {
+                    await endTournament(currentTournamentKey);
+                    // Important: Clear it immediately after ending
+                    currentTournamentKey = null;
+                }
+
+                // 4. Start NEW tournament ONLY if Auto is Enabled
+                if (autoTournamentEnabled) {
+                    currentTournamentKey = newKey;
+                    console.log(`✅ [AUTO START] Started new tournament: ${newKey}`);
+                } else {
+                    console.log(`🛑 [AUTO STOP] Auto disabled - waiting for manual/scheduled or toggle.`);
+                    // currentTournamentKey remains null
+                }
+            } else {
+                // Same time slot. 
+                if (autoCheckCount % 6 === 0) { // Log every 60 seconds
+                    console.log(`✅ [HEARTBEAT #${autoCheckCount}] Current: ${currentTournamentKey || 'None'} | Auto: ${autoTournamentEnabled}`);
+                }
             }
         }
 
