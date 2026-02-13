@@ -584,19 +584,26 @@ setInterval(async () => {
         }
 
         // Check daily schedules
+        // ALWAYS use Indian Standard Time (IST - UTC+5:30) for daily schedules
         const dailySchedules = await redis.lrange('tournament:daily-schedules', 0, 99);
         if (dailySchedules && dailySchedules.length > 0) {
-            const today = new Date(now);
-            const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30 = 19800000 ms
+            
+            // Get current time in IST
+            const nowIST = new Date(now + IST_OFFSET_MS);
+            const istYear = nowIST.getUTCFullYear();
+            const istMonth = nowIST.getUTCMonth();
+            const istDate = nowIST.getUTCDate();
+            const todayStr = `${istYear}-${String(istMonth + 1).padStart(2, '0')}-${String(istDate).padStart(2, '0')}`;
             
             for (const item of dailySchedules) {
                 try {
                     const dailySchedule = JSON.parse(item);
                     const [hours, minutes] = dailySchedule.time.split(':').map(Number);
                     
-                    // Create today's scheduled time
-                    const scheduledTimeToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes, 0, 0);
-                    const scheduledTimestamp = scheduledTimeToday.getTime();
+                    // Create scheduled time in IST (treat as UTC, then subtract IST offset)
+                    const scheduledIST = new Date(Date.UTC(istYear, istMonth, istDate, hours, minutes, 0, 0));
+                    const scheduledTimestamp = scheduledIST.getTime() - IST_OFFSET_MS;
                     const timeDiff = now - scheduledTimestamp;
                     
                     // Check if we already created a tournament for this daily schedule today
@@ -674,47 +681,35 @@ fastify.get('/api/tournament-data', async (req, reply) => {
         }).filter(x => x !== null);
 
         // Calculate next daily tournament time
+        // ALWAYS use Indian Standard Time (IST - UTC+5:30) for daily schedules
         let nextDailyTournament = null;
         if (dailySchedules.length > 0) {
             const now = Date.now();
-            const today = new Date(now);
+            const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30 = 19800000 ms
             
-            // Get client timezone offset from request headers (if available)
-            // Client sends offset in minutes (positive = behind UTC, negative = ahead)
-            const clientTimezoneOffset = req.headers['x-timezone-offset'] 
-                ? parseInt(req.headers['x-timezone-offset']) 
-                : today.getTimezoneOffset();
+            // Get current time in IST
+            const nowIST = new Date(now + IST_OFFSET_MS);
+            const istYear = nowIST.getUTCFullYear();
+            const istMonth = nowIST.getUTCMonth();
+            const istDate = nowIST.getUTCDate();
             
-            // Server timezone offset (in minutes, positive = behind UTC)
-            const serverOffset = today.getTimezoneOffset();
-            
-            // Calculate timezone difference in milliseconds
-            // If client is 5 hours behind server, we need to add 5 hours to server time
-            const timezoneDiffMinutes = clientTimezoneOffset - serverOffset;
-            const timezoneDiffMs = timezoneDiffMinutes * 60 * 1000;
-            
-            // Find the next daily tournament time (today or tomorrow)
+            // Find the next daily tournament time (today or tomorrow in IST)
             const nextTimes = dailySchedules.map(daily => {
                 const [hours, minutes] = daily.time.split(':').map(Number);
                 
-                // Create date in server's local timezone for the scheduled time
-                const todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes, 0, 0);
-                let todayTimestamp = todayTime.getTime();
-                
-                // Adjust for client timezone: if client is behind server, add the difference
-                // Example: Server is IST (UTC+5:30), Client is EST (UTC-5:00)
-                // Difference = EST offset - IST offset = -330 - 330 = -660 minutes
-                // So we need to subtract 660 minutes from server time to get client time
-                todayTimestamp = todayTimestamp - timezoneDiffMs;
+                // Create date for scheduled time in IST (as UTC, then subtract IST offset to get actual UTC)
+                // Example: 8:00 PM IST = 20:00 IST = 14:30 UTC
+                const scheduledIST = new Date(Date.UTC(istYear, istMonth, istDate, hours, minutes, 0, 0));
+                let scheduledUTC = scheduledIST.getTime() - IST_OFFSET_MS;
                 
                 // If today's time has passed, use tomorrow's time
-                if (todayTimestamp <= now) {
-                    todayTimestamp += 86400000; // Add 24 hours
+                if (scheduledUTC <= now) {
+                    scheduledUTC += 86400000; // Add 24 hours
                 }
                 
                 return {
                     id: daily.id,
-                    scheduledTime: todayTimestamp,
+                    scheduledTime: scheduledUTC,
                     playTime: daily.playTime * 60 * 1000,
                     leaderboardTime: daily.leaderboardTime * 60 * 1000,
                     duration: (daily.playTime + daily.leaderboardTime) * 60 * 1000,
