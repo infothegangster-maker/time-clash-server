@@ -763,6 +763,84 @@ fastify.get('/api/tournament-data', async (req, reply) => {
     }
 });
 
+// API: Get Current Tournament Results (Winners, Target Time, User Rank)
+fastify.get('/api/tournament-results', async (req, reply) => {
+    try {
+        const userId = req.query.userId || null;
+        
+        if (!currentTournamentKey) {
+            return { error: "No active tournament", winners: [], targetTime: null, userRank: null };
+        }
+
+        // Get target time for this tournament
+        // Check both key formats (old and new)
+        const targetKey1 = `${currentTournamentKey}_target`;
+        const targetKey2 = `tournament:${currentTournamentKey}:target`;
+        let targetTime = await redis.get(targetKey1);
+        if (!targetTime) {
+            targetTime = await redis.get(targetKey2);
+        }
+        
+        // Get top 3 winners
+        const top3 = await redis.zrange(currentTournamentKey, 0, 2, 'WITHSCORES');
+        const winners = [];
+        
+        if (Array.isArray(top3)) {
+            if (top3.length > 0 && typeof top3[0] === 'object') {
+                top3.forEach(x => winners.push({ userId: x.member, score: x.score }));
+            } else {
+                for (let i = 0; i < top3.length; i += 2) {
+                    if (top3[i] && top3[i + 1] !== undefined) {
+                        winners.push({ userId: top3[i], score: parseFloat(top3[i + 1]) });
+                    }
+                }
+            }
+        }
+
+        // Get display names for winners
+        for (let w of winners) {
+            try {
+                const meta = await redis.hgetall(`user_meta:${w.userId}`);
+                if (meta && meta.username) {
+                    w.username = meta.username;
+                    w.email = meta.email || '';
+                }
+            } catch (e) { /* ignore */ }
+            if (!w.username) {
+                const activeUser = Array.from(activeUsers.values()).find(u => u.userId === w.userId);
+                if (activeUser) {
+                    w.username = activeUser.username;
+                    w.email = activeUser.email || '';
+                }
+            }
+            if (!w.username) w.username = w.userId.substring(0, 10) + '...';
+        }
+
+        // Get user's rank if userId provided
+        let userRank = null;
+        if (userId) {
+            const userScore = await redis.zscore(currentTournamentKey, userId);
+            if (userScore !== null) {
+                const rank = await redis.zrank(currentTournamentKey, userId);
+                userRank = {
+                    rank: rank !== null ? rank + 1 : null,
+                    score: parseFloat(userScore)
+                };
+            }
+        }
+
+        return {
+            tournamentId: currentTournamentKey,
+            targetTime: targetTime ? parseInt(targetTime) : null,
+            winners: winners,
+            userRank: userRank
+        };
+    } catch (e) {
+        console.error("Error in /api/tournament-results:", e);
+        return { error: e.message, winners: [], targetTime: null, userRank: null };
+    }
+});
+
 // Admin: Get Tournament History with Full Details
 fastify.get('/api/admin/tournament-history', async (req, reply) => {
     try {
