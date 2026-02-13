@@ -516,7 +516,7 @@ async function createTournamentFromSchedule(schedule, scheduleType, scheduleId) 
     await redis.setex(`tournament:${newTournamentId}:leaderboardTime`, expirySeconds, leaderboardTime.toString());
     await redis.setex(`tournament:${newTournamentId}:startTime`, expirySeconds, tournamentStartTime.toString());
 
-    // Broadcast
+    // Broadcast tournament creation
     io.emit('tournament_new', {
         id: newTournamentId,
         duration: duration,
@@ -524,8 +524,43 @@ async function createTournamentFromSchedule(schedule, scheduleType, scheduleId) 
         leaderboardTime: leaderboardTime
     });
 
+    // Immediately broadcast phase update so clients know tournament is active
+    // Retry a few times to ensure Redis data is available
+    let retryCount = 0;
+    const maxRetries = 5;
+    const broadcastPhase = async () => {
+        try {
+            const phase = await getTournamentPhase(newTournamentId);
+            const timeLeft = await getTournamentTimeLeft(newTournamentId);
+            const lbTimeLeft = await getLeaderboardTimeLeft(newTournamentId);
+            
+            // Only broadcast if phase is valid (not 'n')
+            if (phase !== 'n' || retryCount >= maxRetries) {
+                io.emit('tu', {
+                    ph: phase,
+                    tid: newTournamentId,
+                    tl: timeLeft,
+                    ltl: lbTimeLeft
+                });
+                console.log(`📡 [BROADCAST] Tournament phase after creation: ${phase} | TID: ${newTournamentId} | TL: ${timeLeft}ms | LTL: ${lbTimeLeft}ms`);
+            } else {
+                // Retry if phase is 'n' and we haven't exceeded max retries
+                retryCount++;
+                setTimeout(broadcastPhase, 200);
+            }
+        } catch (e) {
+            console.error(`❌ Error broadcasting tournament phase:`, e);
+            if (retryCount < maxRetries) {
+                retryCount++;
+                setTimeout(broadcastPhase, 200);
+            }
+        }
+    };
+    setTimeout(broadcastPhase, 100); // Initial delay to ensure Redis data is available
+
     console.log(`✅ [SUCCESS] Tournament Created: ${newTournamentId}`);
     console.log(`   Duration: ${duration / 60000}min | Play: ${playTime / 60000}min | Leaderboard: ${leaderboardTime / 60000}min`);
+    console.log(`   Current Tournament Key: ${currentTournamentKey}`);
 }
 
 // Check scheduled tournaments and daily schedules every 10 seconds
@@ -616,6 +651,8 @@ setInterval(async () => {
 
                     // Execute if scheduled time is within last 15 seconds or next 5 seconds
                     if (timeDiff >= -5000 && timeDiff <= checkWindow) {
+                        const scheduledTimeToday = new Date(scheduledTimestamp);
+                        const currentDate = new Date(now);
                         console.log(`⏰ [EXECUTING] Daily Tournament: ${dailySchedule.time} (ID: ${dailySchedule.id})`);
                         console.log(`   Scheduled Time: ${scheduledTimeToday.toLocaleString()}`);
                         console.log(`   Current Time: ${currentDate.toLocaleString()}`);
@@ -1653,17 +1690,21 @@ io.on('connection', (socket) => {
                     currentTournamentKey = getTournamentKey();
                     currentTournamentId = currentTournamentKey;
                 } else {
-                    // Auto tournaments disabled and no manual/scheduled tournament
+                    // Auto tournaments disabled - but scheduled/daily tournaments can still run
+                    // Check if there's a scheduled/daily tournament that should be active
+                    // If not, return no tournament
                     return socket.emit('grd', {
                         t: 0,
                         b: -1,
                         r: -1,
                         tl: 0,
                         tid: null,
+                        ph: 'n',
                         noTournament: true
                     });
                 }
             } else {
+                // Active tournament exists (could be auto, scheduled, manual, or daily)
                 currentTournamentId = currentTournamentKey;
             }
         } else {
@@ -1675,9 +1716,15 @@ io.on('connection', (socket) => {
         let targetTime;
         if (mode === 't') {
             // Tournament mode: Get or create same target for all users
-            const targetKey = `${currentTournamentId}_target`;
+            // Check both key formats for compatibility
+            const targetKey1 = `${currentTournamentId}_target`;
+            const targetKey2 = `tournament:${currentTournamentId}:target`;
             try {
-                const existingTarget = await redis.get(targetKey);
+                let existingTarget = await redis.get(targetKey1);
+                if (!existingTarget) {
+                    existingTarget = await redis.get(targetKey2);
+                }
+                
                 if (existingTarget) {
                     // Target already exists for this tournament - use it
                     targetTime = parseInt(existingTarget);
@@ -1685,8 +1732,10 @@ io.on('connection', (socket) => {
                 } else {
                     // Generate new target for this tournament and store it
                     targetTime = Math.floor(Math.random() * 9000) + 1000;
-                    // Store it with tournament duration expiry (15 minutes = 900 seconds)
-                    await redis.setex(targetKey, Math.ceil(TOURNAMENT_DURATION_MS / 1000), targetTime.toString());
+                    // Store it with tournament duration expiry (use longer expiry for custom tournaments)
+                    const expirySeconds = Math.ceil(TOURNAMENT_DURATION_MS / 1000) + 60; // Add 60s buffer
+                    await redis.setex(targetKey1, expirySeconds, targetTime.toString());
+                    await redis.setex(targetKey2, expirySeconds, targetTime.toString()); // Store in both formats
                     console.log(`🎯 Generated NEW target for tournament ${currentTournamentId}: ${targetTime}ms`);
                 }
             } catch (e) {
