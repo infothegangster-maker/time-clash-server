@@ -679,20 +679,42 @@ fastify.get('/api/tournament-data', async (req, reply) => {
             const now = Date.now();
             const today = new Date(now);
             
+            // Get client timezone offset from request headers (if available)
+            // Client sends offset in minutes (positive = behind UTC, negative = ahead)
+            const clientTimezoneOffset = req.headers['x-timezone-offset'] 
+                ? parseInt(req.headers['x-timezone-offset']) 
+                : today.getTimezoneOffset();
+            
+            // Server timezone offset (in minutes, positive = behind UTC)
+            const serverOffset = today.getTimezoneOffset();
+            
+            // Calculate timezone difference in milliseconds
+            // If client is 5 hours behind server, we need to add 5 hours to server time
+            const timezoneDiffMinutes = clientTimezoneOffset - serverOffset;
+            const timezoneDiffMs = timezoneDiffMinutes * 60 * 1000;
+            
             // Find the next daily tournament time (today or tomorrow)
             const nextTimes = dailySchedules.map(daily => {
                 const [hours, minutes] = daily.time.split(':').map(Number);
                 
-                // Today's time
+                // Create date in server's local timezone for the scheduled time
                 const todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes, 0, 0);
-                const todayTimestamp = todayTime.getTime();
+                let todayTimestamp = todayTime.getTime();
+                
+                // Adjust for client timezone: if client is behind server, add the difference
+                // Example: Server is IST (UTC+5:30), Client is EST (UTC-5:00)
+                // Difference = EST offset - IST offset = -330 - 330 = -660 minutes
+                // So we need to subtract 660 minutes from server time to get client time
+                todayTimestamp = todayTimestamp - timezoneDiffMs;
                 
                 // If today's time has passed, use tomorrow's time
-                const scheduledTime = todayTimestamp > now ? todayTimestamp : todayTimestamp + 86400000; // Add 24 hours
+                if (todayTimestamp <= now) {
+                    todayTimestamp += 86400000; // Add 24 hours
+                }
                 
                 return {
                     id: daily.id,
-                    scheduledTime: scheduledTime,
+                    scheduledTime: todayTimestamp,
                     playTime: daily.playTime * 60 * 1000,
                     leaderboardTime: daily.leaderboardTime * 60 * 1000,
                     duration: (daily.playTime + daily.leaderboardTime) * 60 * 1000,
