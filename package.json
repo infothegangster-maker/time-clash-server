@@ -16,6 +16,7 @@
     "@capacitor/ios": "^6.2.1",
     "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@fastify/cors": "^8.4.1",
+    "@supabase/supabase-js": "^2.95.3",
     "@upstash/redis": "^1.36.0",
     "dotenv": "^16.6.1",
     "fastify": "^4.24.3",

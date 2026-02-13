@@ -21,6 +21,19 @@ if (REDIS_URL && REDIS_URL.includes('upstash')) {
     redis = new IORedis(REDIS_URL || 'redis://localhost:6379');
 }
 
+// --- SUPABASE SETUP (Persistent Database) ---
+let supabase = null;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+
+if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+    const { createClient } = require('@supabase/supabase-js');
+    supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+    console.log("🗄️ Supabase Connected (Persistent Database)");
+} else {
+    console.log("⚠️ Supabase not configured - tournament data will NOT be persisted. Set SUPABASE_URL and SUPABASE_SERVICE_KEY.");
+}
+
 // --- FASTIFY SETUP ---
 fastify.register(require('@fastify/cors'), { origin: "*" });
 
@@ -1035,8 +1048,190 @@ async function endTournament(oldKey) {
 
         console.log(`✅ Tournament Archived: ${oldKey} with ${winners.length} winners`);
 
+        // 4. PERSIST to Supabase (async, non-blocking)
+        archiveTournamentToSupabase(oldKey, winners).catch(e => {
+            console.error("❌ Supabase Archive Error:", e);
+        });
+
     } catch (e) {
         console.error("❌ Error Ending Tournament:", e);
+    }
+}
+
+// --- SUPABASE ARCHIVE FUNCTION ---
+// Saves COMPLETE tournament data to PostgreSQL (runs in background)
+async function archiveTournamentToSupabase(tournamentId, winners) {
+    if (!supabase) return; // Skip if Supabase not configured
+
+    console.log(`🗄️ [SUPABASE] Archiving tournament: ${tournamentId}`);
+
+    try {
+        // 1. Get ALL participants from Redis (not just top 3)
+        const allParticipants = await redis.zrange(tournamentId, 0, -1, 'WITHSCORES');
+
+        const participants = [];
+        if (Array.isArray(allParticipants)) {
+            if (allParticipants.length > 0 && typeof allParticipants[0] === 'object') {
+                // Upstash format
+                allParticipants.forEach((x, idx) => participants.push({
+                    userId: x.member, score: x.score, rank: idx + 1
+                }));
+            } else {
+                // Flat array format
+                for (let i = 0; i < allParticipants.length; i += 2) {
+                    participants.push({
+                        userId: allParticipants[i], score: parseFloat(allParticipants[i + 1]), rank: (i / 2) + 1
+                    });
+                }
+            }
+        }
+
+        // 2. Resolve display names for ALL participants
+        for (let p of participants) {
+            try {
+                const meta = await redis.hgetall(`user_meta:${p.userId}`);
+                if (meta && meta.username) {
+                    p.username = meta.username;
+                    p.email = meta.email || '';
+                }
+            } catch (e) { /* ignore */ }
+            if (!p.username) {
+                const activeUser = Array.from(activeUsers.values()).find(u => u.userId === p.userId);
+                if (activeUser) {
+                    p.username = activeUser.username;
+                    p.email = activeUser.email || '';
+                }
+            }
+            if (!p.username) p.username = p.userId.startsWith('guest_') ? 'Guest' : p.userId;
+            if (!p.email) p.email = '';
+        }
+
+        // 3. Get tournament timing info
+        const custom = await getCustomTournamentTiming(tournamentId);
+        const tournamentType = tournamentId.includes('_scheduled_') ? 'scheduled' :
+            tournamentId.includes('_manual_') ? 'manual' : 'auto';
+
+        // 4. Get target time for this tournament
+        let targetTime = null;
+        try {
+            const targetKey = `${tournamentId}_target`;
+            const target = await redis.get(targetKey);
+            if (target) targetTime = parseInt(target);
+        } catch (e) { /* ignore */ }
+
+        // 5. INSERT tournament record
+        const tournamentRecord = {
+            id: tournamentId,
+            type: tournamentType,
+            started_at: custom ? new Date(custom.startTime).toISOString() : new Date().toISOString(),
+            ended_at: new Date().toISOString(),
+            duration_ms: custom ? custom.duration || (custom.playTime + custom.leaderboardTime) : TOURNAMENT_DURATION_MS,
+            play_time_ms: custom ? custom.playTime : PLAY_TIME_MS,
+            leaderboard_time_ms: custom ? custom.leaderboardTime : WINNER_TIME_MS,
+            target_time: targetTime,
+            total_players: participants.length,
+            winner_uid: winners[0]?.u || null,
+            winner_name: winners[0]?.n || null,
+            winner_score: winners[0]?.s != null ? parseFloat(winners[0].s) : null,
+            second_uid: winners[1]?.u || null,
+            second_name: winners[1]?.n || null,
+            second_score: winners[1]?.s != null ? parseFloat(winners[1].s) : null,
+            third_uid: winners[2]?.u || null,
+            third_name: winners[2]?.n || null,
+            third_score: winners[2]?.s != null ? parseFloat(winners[2].s) : null
+        };
+
+        const { error: tournamentError } = await supabase
+            .from('tournaments')
+            .upsert(tournamentRecord, { onConflict: 'id' });
+
+        if (tournamentError) {
+            console.error("❌ [SUPABASE] Tournament insert error:", tournamentError);
+            return;
+        }
+
+        console.log(`🗄️ [SUPABASE] Tournament record saved: ${tournamentId} (${participants.length} players)`);
+
+        // 6. INSERT all participant scores (batch insert in chunks of 500)
+        if (participants.length > 0) {
+            const scoreRows = participants.map(p => ({
+                tournament_id: tournamentId,
+                user_id: p.userId,
+                username: p.username,
+                email: p.email,
+                best_score: p.score,
+                rank: p.rank
+            }));
+
+            // Batch insert in chunks (Supabase has row limits)
+            const CHUNK_SIZE = 500;
+            for (let i = 0; i < scoreRows.length; i += CHUNK_SIZE) {
+                const chunk = scoreRows.slice(i, i + CHUNK_SIZE);
+                const { error: scoresError } = await supabase
+                    .from('tournament_scores')
+                    .upsert(chunk, { onConflict: 'tournament_id,user_id' });
+
+                if (scoresError) {
+                    console.error(`❌ [SUPABASE] Scores batch ${Math.floor(i / CHUNK_SIZE) + 1} error:`, scoresError);
+                }
+            }
+
+            console.log(`🗄️ [SUPABASE] ${participants.length} participant scores saved`);
+        }
+
+        // 7. UPDATE user lifetime stats
+        for (const p of participants) {
+            if (p.userId.startsWith('guest_')) continue; // Skip guest users
+
+            try {
+                // Check if user exists
+                const { data: existingUser } = await supabase
+                    .from('users')
+                    .select('id, total_games, total_tournaments, total_wins, total_top3, best_ever_score, total_score')
+                    .eq('id', p.userId)
+                    .single();
+
+                if (existingUser) {
+                    // UPDATE existing user
+                    const updates = {
+                        username: p.username,
+                        email: p.email,
+                        total_tournaments: existingUser.total_tournaments + 1,
+                        total_score: (existingUser.total_score || 0) + p.score,
+                        last_played: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    };
+
+                    if (p.rank === 1) updates.total_wins = existingUser.total_wins + 1;
+                    if (p.rank <= 3) updates.total_top3 = (existingUser.total_top3 || 0) + 1;
+                    if (!existingUser.best_ever_score || p.score < existingUser.best_ever_score) {
+                        updates.best_ever_score = p.score;
+                    }
+
+                    await supabase.from('users').update(updates).eq('id', p.userId);
+                } else {
+                    // INSERT new user
+                    await supabase.from('users').insert({
+                        id: p.userId,
+                        username: p.username,
+                        email: p.email,
+                        total_tournaments: 1,
+                        total_wins: p.rank === 1 ? 1 : 0,
+                        total_top3: p.rank <= 3 ? 1 : 0,
+                        best_ever_score: p.score,
+                        total_score: p.score,
+                        last_played: new Date().toISOString()
+                    });
+                }
+            } catch (e) {
+                // Ignore individual user update errors
+            }
+        }
+
+        console.log(`🗄️ [SUPABASE] ✅ Tournament fully archived: ${tournamentId} | ${participants.length} players | Winner: ${winners[0]?.n || 'None'}`);
+
+    } catch (e) {
+        console.error("❌ [SUPABASE] Archive failed:", e);
     }
 }
 
