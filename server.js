@@ -714,7 +714,7 @@ async function getLeaderboardTimeLeft(tournamentId = null) {
     // Check custom timing
     const custom = await getCustomTournamentTiming(tournamentId);
     if (custom) {
-        const totalDuration = custom.playTime + (custom.leaderboardTime || WINNER_TIME_MS);
+        const totalDuration = custom.playTime + (custom.leaderboardTime || LEADERBOARD_TIME_MS);
         const elapsed = now - custom.startTime;
         return Math.max(0, totalDuration - elapsed);
     }
@@ -1127,7 +1127,7 @@ async function archiveTournamentToSupabase(tournamentId, winners) {
             ended_at: new Date().toISOString(),
             duration_ms: custom ? custom.duration || (custom.playTime + custom.leaderboardTime) : TOURNAMENT_DURATION_MS,
             play_time_ms: custom ? custom.playTime : PLAY_TIME_MS,
-            leaderboard_time_ms: custom ? custom.leaderboardTime : WINNER_TIME_MS,
+            leaderboard_time_ms: custom ? custom.leaderboardTime : LEADERBOARD_TIME_MS,
             target_time: targetTime,
             total_players: participants.length,
             winner_uid: winners[0]?.u || null,
