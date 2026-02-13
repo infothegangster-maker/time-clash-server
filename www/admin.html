@@ -425,9 +425,54 @@
             </div>
             
             <!-- Scheduled Tournaments List -->
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px;">
+            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
                 <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 15px; color: #FFD700;">📅 Scheduled Tournaments</div>
                 <div id="scheduled-list" class="loading">Loading...</div>
+            </div>
+            
+            <!-- Daily Tournament Schedule -->
+            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px;">
+                <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 15px; color: #FFD700;">📆 Daily Tournament Schedule</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    ℹ️ Set multiple tournaments per day at specific times. These will repeat daily automatically.
+                </div>
+                
+                <!-- Add New Daily Schedule -->
+                <div style="background: rgba(255, 255, 255, 0.03); padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(255, 255, 255, 0.1);">
+                    <div style="font-weight: 600; font-size: 1rem; margin-bottom: 15px; color: #3b82f6;">➕ Add New Daily Schedule</div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Time (HH:MM)</label>
+                            <input type="time" id="dailyScheduleTime" 
+                                style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                                onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                                onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Play Time (min)</label>
+                            <input type="number" id="dailyPlayTime" value="12" min="3" max="55" step="1" 
+                                style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                                onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                                onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Leaderboard Time (min)</label>
+                            <input type="number" id="dailyLeaderboardTime" value="3" min="1" max="10" step="1" 
+                                style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                                onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                                onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                        </div>
+                    </div>
+                    <button onclick="addDailySchedule()" 
+                        style="background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 1rem; transition: all 0.2s; box-shadow: 0 4px 6px rgba(139, 92, 246, 0.3);"
+                        onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(139, 92, 246, 0.4)'"
+                        onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 6px rgba(139, 92, 246, 0.3)'">
+                        ➕ Add Daily Schedule
+                    </button>
+                </div>
+                
+                <!-- Daily Schedules List -->
+                <div id="daily-schedules-list" class="loading">Loading...</div>
             </div>
         </div>
         
@@ -1043,6 +1088,148 @@
             }
         }
         
+        // Load Daily Schedules
+        async function loadDailySchedules() {
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament/daily-schedules`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    document.getElementById('daily-schedules-list').innerHTML = `<div style="color: #ef4444;">Error: ${data.error}</div>`;
+                    return;
+                }
+                
+                const schedules = data.schedules || [];
+                if (schedules.length === 0) {
+                    document.getElementById('daily-schedules-list').innerHTML = '<div style="color: #94a3b8; padding: 10px;">No daily schedules set. Add schedules above to run tournaments automatically at specific times every day.</div>';
+                    return;
+                }
+                
+                // Sort by time
+                schedules.sort((a, b) => {
+                    const timeA = a.time.split(':').map(Number);
+                    const timeB = b.time.split(':').map(Number);
+                    return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
+                });
+                
+                const schedulesHtml = schedules.map(s => {
+                    return `
+                        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.1);">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                                    <div>
+                                        <strong style="color: #FFD700; font-size: 1.1rem;">${s.time}</strong>
+                                        <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">Daily at this time</div>
+                                    </div>
+                                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                                        <div>
+                                            <div style="color: #94a3b8; font-size: 0.8rem;">Play Time</div>
+                                            <div style="color: #22c55e; font-weight: 600;">${s.playTime} min</div>
+                                        </div>
+                                        <div>
+                                            <div style="color: #94a3b8; font-size: 0.8rem;">Leaderboard</div>
+                                            <div style="color: #f59e0b; font-weight: 600;">${s.leaderboardTime} min</div>
+                                        </div>
+                                        <div>
+                                            <div style="color: #94a3b8; font-size: 0.8rem;">Total</div>
+                                            <div style="color: #3b82f6; font-weight: 600;">${s.playTime + s.leaderboardTime} min</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onclick="deleteDailySchedule('${s.id}')" 
+                                style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-weight: 600; transition: all 0.2s;"
+                                onmouseover="this.style.background='#dc2626'"
+                                onmouseout="this.style.background='#ef4444'">
+                                🗑️ Delete
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+                
+                document.getElementById('daily-schedules-list').innerHTML = schedulesHtml;
+            } catch (e) {
+                document.getElementById('daily-schedules-list').innerHTML = `<div style="color: #ef4444;">Error: ${e.message}</div>`;
+            }
+        }
+        
+        // Add Daily Schedule
+        async function addDailySchedule() {
+            try {
+                const time = document.getElementById('dailyScheduleTime').value;
+                const playTime = parseInt(document.getElementById('dailyPlayTime').value);
+                const leaderboardTime = parseInt(document.getElementById('dailyLeaderboardTime').value);
+                
+                if (!time) {
+                    alert('Please select a time!');
+                    return;
+                }
+                
+                if (playTime < 3 || playTime > 55) {
+                    alert('Play Time must be between 3 and 55 minutes!');
+                    return;
+                }
+                
+                if (leaderboardTime < 1 || leaderboardTime > 10) {
+                    alert('Leaderboard Time must be between 1 and 10 minutes!');
+                    return;
+                }
+                
+                if (!confirm(`Add daily tournament at ${time}?\n\nPlay Time: ${playTime} min\nLeaderboard Time: ${leaderboardTime} min\nTotal: ${playTime + leaderboardTime} min`)) {
+                    return;
+                }
+                
+                const url = `${SERVER_URL}/api/admin/tournament/daily-schedule`;
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ time, playTime, leaderboardTime })
+                });
+                
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                
+                alert(`✅ Daily schedule added!\nTournament will run daily at ${time}`);
+                
+                // Clear inputs
+                document.getElementById('dailyScheduleTime').value = '';
+                document.getElementById('dailyPlayTime').value = '12';
+                document.getElementById('dailyLeaderboardTime').value = '3';
+                
+                loadDailySchedules();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+        
+        // Delete Daily Schedule
+        async function deleteDailySchedule(scheduleId) {
+            if (!confirm('Delete this daily schedule?')) return;
+            
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament/daily-schedule/${scheduleId}`;
+                const res = await fetch(url, { method: 'DELETE' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                
+                loadDailySchedules();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+        
         async function loadAllData() {
             await Promise.all([
                 loadActiveUsers(),
@@ -1050,7 +1237,8 @@
                 loadTournamentHistory(),
                 loadSystemStats(),
                 loadAllUsers(),
-                loadTournamentStatus()
+                loadTournamentStatus(),
+                loadDailySchedules()
             ]);
         }
         

@@ -371,94 +371,268 @@ fastify.delete('/api/admin/tournament/schedule/:scheduleId', async (req, reply) 
     }
 });
 
-// Check scheduled tournaments every 10 seconds (more frequent for better accuracy)
+// Admin: Add Daily Tournament Schedule
+fastify.post('/api/admin/tournament/daily-schedule', async (req, reply) => {
+    try {
+        const { time, playTime, leaderboardTime } = req.body;
+
+        if (!time) {
+            return { error: 'time is required (HH:MM format)' };
+        }
+
+        // Validate time format
+        const timeMatch = time.match(/^(\d{2}):(\d{2})$/);
+        if (!timeMatch) {
+            return { error: 'Invalid time format. Use HH:MM (e.g., 14:30)' };
+        }
+
+        const hours = parseInt(timeMatch[1]);
+        const minutes = parseInt(timeMatch[2]);
+        if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+            return { error: 'Invalid time. Hours: 0-23, Minutes: 0-59' };
+        }
+
+        const playTimeMs = (playTime || 12) * 60 * 1000;
+        const leaderboardTimeMs = (leaderboardTime || 3) * 60 * 1000;
+        const duration = playTimeMs + leaderboardTimeMs;
+
+        // Check if this time already exists
+        const existing = await redis.lrange('tournament:daily-schedules', 0, 99);
+        for (const item of existing) {
+            try {
+                const s = JSON.parse(item);
+                if (s.time === time) {
+                    return { error: `Daily schedule already exists for ${time}` };
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+
+        const schedule = {
+            id: `daily_${Date.now()}`,
+            time: time,
+            playTime: playTime || 12,
+            leaderboardTime: leaderboardTime || 3,
+            duration: duration,
+            createdAt: Date.now()
+        };
+
+        // Add to daily schedules list
+        await redis.lpush('tournament:daily-schedules', JSON.stringify(schedule));
+        await redis.ltrim('tournament:daily-schedules', 0, 99); // Keep last 100
+
+        console.log(`📆 Daily Tournament Schedule Added: ${time} (Play: ${playTime}min, Leaderboard: ${leaderboardTime}min)`);
+
+        return {
+            success: true,
+            schedule: schedule
+        };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Admin: Get All Daily Schedules
+fastify.get('/api/admin/tournament/daily-schedules', async (req, reply) => {
+    try {
+        const schedulesRaw = await redis.lrange('tournament:daily-schedules', 0, 99);
+        const schedules = schedulesRaw.map(x => {
+            try {
+                return JSON.parse(x);
+            } catch (e) {
+                return null;
+            }
+        }).filter(x => x !== null);
+
+        return {
+            success: true,
+            schedules: schedules
+        };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Admin: Delete Daily Schedule
+fastify.delete('/api/admin/tournament/daily-schedule/:scheduleId', async (req, reply) => {
+    try {
+        const { scheduleId } = req.params;
+        const schedules = await redis.lrange('tournament:daily-schedules', 0, 99);
+
+        const filtered = schedules.filter(x => {
+            try {
+                const s = JSON.parse(x);
+                return s.id !== scheduleId;
+            } catch (e) {
+                return true;
+            }
+        });
+
+        // Replace the list
+        await redis.del('tournament:daily-schedules');
+        if (filtered.length > 0) {
+            await redis.rpush('tournament:daily-schedules', ...filtered);
+        }
+
+        return { success: true, message: 'Daily schedule deleted' };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Helper function to create tournament from schedule
+async function createTournamentFromSchedule(schedule, scheduleType, scheduleId) {
+    // End current tournament
+    console.log(`   🏁 Ending current tournament: ${currentTournamentKey}`);
+    await endTournament(currentTournamentKey);
+
+    // Create new tournament
+    const tournamentStartTime = Date.now();
+    const newTournamentId = `tournament_${scheduleType}_${scheduleId}_${tournamentStartTime}`;
+    currentTournamentKey = newTournamentId;
+    console.log(`   ➕ Creating new tournament: ${newTournamentId}`);
+
+    // Handle different schedule formats:
+    // - Scheduled tournaments: playTime and leaderboardTime are in milliseconds
+    // - Daily schedules: playTime and leaderboardTime are in minutes
+    let playTime, leaderboardTime, duration;
+    
+    if (scheduleType === 'daily') {
+        // Daily schedules store time in minutes
+        playTime = (schedule.playTime || 12) * 60 * 1000;
+        leaderboardTime = (schedule.leaderboardTime || 3) * 60 * 1000;
+        duration = playTime + leaderboardTime;
+    } else {
+        // Scheduled tournaments store time in milliseconds
+        playTime = schedule.playTime || PLAY_TIME_MS;
+        leaderboardTime = schedule.leaderboardTime || LEADERBOARD_TIME_MS;
+        duration = schedule.duration || (playTime + leaderboardTime);
+    }
+    
+    const expirySeconds = Math.ceil(duration / 1000);
+    await redis.setex(`tournament:${newTournamentId}:duration`, expirySeconds, duration.toString());
+    await redis.setex(`tournament:${newTournamentId}:playTime`, expirySeconds, playTime.toString());
+    await redis.setex(`tournament:${newTournamentId}:leaderboardTime`, expirySeconds, leaderboardTime.toString());
+    await redis.setex(`tournament:${newTournamentId}:startTime`, expirySeconds, tournamentStartTime.toString());
+
+    // Broadcast
+    io.emit('tournament_new', {
+        id: newTournamentId,
+        duration: duration,
+        playTime: playTime,
+        leaderboardTime: leaderboardTime
+    });
+
+    console.log(`✅ [SUCCESS] Tournament Created: ${newTournamentId}`);
+    console.log(`   Duration: ${duration / 60000}min | Play: ${playTime / 60000}min | Leaderboard: ${leaderboardTime / 60000}min`);
+}
+
+// Check scheduled tournaments and daily schedules every 10 seconds
 let scheduledCheckCount = 0;
 setInterval(async () => {
     try {
         scheduledCheckCount++;
+        const now = Date.now();
+        const checkWindow = 15000; // 15 seconds window
+        const currentDate = new Date(now);
+        
+        // Check one-time scheduled tournaments
         const scheduled = await redis.lrange('tournament:scheduled', 0, 99);
+        if (scheduled && scheduled.length > 0) {
+            console.log(`🔍 [SCHEDULED CHECK #${scheduledCheckCount}] Checking ${scheduled.length} scheduled tournament(s)`);
 
-        if (!scheduled || scheduled.length === 0) {
-            if (scheduledCheckCount % 6 === 0) { // Log every 60 seconds
-                console.log(`🔍 [SCHEDULED CHECK #${scheduledCheckCount}] No scheduled tournaments found`);
+            for (const item of scheduled) {
+                try {
+                    const schedule = JSON.parse(item);
+                    const timeDiff = now - schedule.scheduledTime;
+                    const scheduledDate = new Date(schedule.scheduledTime);
+                    const diffMinutes = Math.round(timeDiff / 60000);
+                    const diffSeconds = Math.round(timeDiff / 1000);
+
+                    console.log(`   📅 Schedule ID: ${schedule.id}`);
+                    console.log(`      Scheduled: ${scheduledDate.toLocaleString()}`);
+                    console.log(`      Current: ${currentDate.toLocaleString()}`);
+                    console.log(`      Time Diff: ${diffMinutes}min (${diffSeconds}s) ${timeDiff >= -5000 && timeDiff <= checkWindow ? '✅ IN WINDOW' : '❌ OUT OF WINDOW'}`);
+
+                    // Execute if scheduled time is within last 15 seconds or next 5 seconds
+                    if (timeDiff >= -5000 && timeDiff <= checkWindow) {
+                        console.log(`⏰ [EXECUTING] Scheduled Tournament: ${schedule.id}`);
+                        await createTournamentFromSchedule(schedule, 'scheduled', schedule.id);
+
+                        // Remove from scheduled list
+                        const filtered = scheduled.filter(x => {
+                            try {
+                                const s = JSON.parse(x);
+                                return s.id !== schedule.id;
+                            } catch (e) {
+                                return true;
+                            }
+                        });
+                        await redis.del('tournament:scheduled');
+                        if (filtered.length > 0) {
+                            await redis.rpush('tournament:scheduled', ...filtered);
+                        }
+
+                        // Break after executing one tournament to avoid conflicts
+                        return;
+                    }
+                } catch (e) {
+                    console.error(`❌ [ERROR] Processing schedule:`, e);
+                }
             }
-            return; // No scheduled tournaments
         }
 
-        const now = Date.now();
-        const checkWindow = 15000; // 15 seconds window (check if scheduled time is within last 15 seconds or next 5 seconds)
-
-        console.log(`🔍 [SCHEDULED CHECK #${scheduledCheckCount}] Checking ${scheduled.length} scheduled tournament(s) at ${new Date(now).toISOString()}`);
-
-        for (const item of scheduled) {
-            try {
-                const schedule = JSON.parse(item);
-                const timeDiff = now - schedule.scheduledTime;
-                const scheduledDate = new Date(schedule.scheduledTime);
-                const currentDate = new Date(now);
-                const diffMinutes = Math.round(timeDiff / 60000);
-                const diffSeconds = Math.round(timeDiff / 1000);
-
-                console.log(`   📅 Schedule ID: ${schedule.id}`);
-                console.log(`      Scheduled: ${scheduledDate.toLocaleString()} (UTC: ${scheduledDate.toISOString()})`);
-                console.log(`      Current: ${currentDate.toLocaleString()} (UTC: ${currentDate.toISOString()})`);
-                console.log(`      Time Diff: ${diffMinutes} minutes (${diffSeconds} seconds) ${timeDiff >= -5000 && timeDiff <= checkWindow ? '✅ IN WINDOW' : '❌ OUT OF WINDOW'}`);
-
-                // Execute if scheduled time is within last 15 seconds or next 5 seconds
-                // This ensures we catch tournaments even if check runs slightly before or after scheduled time
-                if (timeDiff >= -5000 && timeDiff <= checkWindow) {
-                    console.log(`⏰ [EXECUTING] Scheduled Tournament: ${schedule.id}`);
-                    console.log(`   Scheduled Time: ${scheduledDate.toISOString()}`);
-                    console.log(`   Current Time: ${currentDate.toISOString()}`);
-                    console.log(`   Time Difference: ${Math.round(timeDiff / 1000)} seconds`);
-
-                    // End current tournament
-                    console.log(`   🏁 Ending current tournament: ${currentTournamentKey}`);
-                    await endTournament(currentTournamentKey);
-
-                    // Create new tournament
-                    const tournamentStartTime = Date.now();
-                    const newTournamentId = `tournament_scheduled_${schedule.id}_${tournamentStartTime}`;
-                    currentTournamentKey = newTournamentId;
-                    console.log(`   ➕ Creating new tournament: ${newTournamentId}`);
-
-                    // Store custom timing with start time
-                    const expirySeconds = Math.ceil(schedule.duration / 1000);
-                    await redis.setex(`tournament:${newTournamentId}:duration`, expirySeconds, schedule.duration.toString());
-                    await redis.setex(`tournament:${newTournamentId}:playTime`, expirySeconds, schedule.playTime.toString());
-                    await redis.setex(`tournament:${newTournamentId}:leaderboardTime`, expirySeconds, schedule.leaderboardTime.toString());
-                    await redis.setex(`tournament:${newTournamentId}:startTime`, expirySeconds, tournamentStartTime.toString());
-
-                    // Broadcast
-                    io.emit('tournament_new', {
-                        id: newTournamentId,
-                        duration: schedule.duration,
-                        playTime: schedule.playTime,
-                        leaderboardTime: schedule.leaderboardTime
-                    });
-
-                    console.log(`✅ [SUCCESS] Scheduled Tournament Created: ${newTournamentId}`);
-                    console.log(`   Duration: ${schedule.duration / 60000}min | Play: ${schedule.playTime / 60000}min | Leaderboard: ${schedule.leaderboardTime / 60000}min`);
-
-                    // Remove from scheduled list
-                    const filtered = scheduled.filter(x => {
-                        try {
-                            const s = JSON.parse(x);
-                            return s.id !== schedule.id;
-                        } catch (e) {
-                            return true;
-                        }
-                    });
-                    await redis.del('tournament:scheduled');
-                    if (filtered.length > 0) {
-                        await redis.rpush('tournament:scheduled', ...filtered);
+        // Check daily schedules
+        const dailySchedules = await redis.lrange('tournament:daily-schedules', 0, 99);
+        if (dailySchedules && dailySchedules.length > 0) {
+            const today = new Date(now);
+            const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            
+            for (const item of dailySchedules) {
+                try {
+                    const dailySchedule = JSON.parse(item);
+                    const [hours, minutes] = dailySchedule.time.split(':').map(Number);
+                    
+                    // Create today's scheduled time
+                    const scheduledTimeToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes, 0, 0);
+                    const scheduledTimestamp = scheduledTimeToday.getTime();
+                    const timeDiff = now - scheduledTimestamp;
+                    
+                    // Check if we already created a tournament for this daily schedule today
+                    const lastExecutedKey = `tournament:daily-executed:${dailySchedule.id}:${todayStr}`;
+                    const alreadyExecuted = await redis.get(lastExecutedKey);
+                    
+                    if (alreadyExecuted) {
+                        continue; // Already executed today
                     }
 
-                    // Break after executing one tournament to avoid conflicts
-                    break;
+                    // Execute if scheduled time is within last 15 seconds or next 5 seconds
+                    if (timeDiff >= -5000 && timeDiff <= checkWindow) {
+                        console.log(`⏰ [EXECUTING] Daily Tournament: ${dailySchedule.time} (ID: ${dailySchedule.id})`);
+                        console.log(`   Scheduled Time: ${scheduledTimeToday.toLocaleString()}`);
+                        console.log(`   Current Time: ${currentDate.toLocaleString()}`);
+                        console.log(`   Time Difference: ${Math.round(timeDiff / 1000)} seconds`);
+
+                        await createTournamentFromSchedule(dailySchedule, 'daily', dailySchedule.id);
+
+                        // Mark as executed today (expires after 24 hours)
+                        await redis.setex(lastExecutedKey, 86400, '1');
+
+                        // Break after executing one tournament to avoid conflicts
+                        return;
+                    }
+                } catch (e) {
+                    console.error(`❌ [ERROR] Processing daily schedule:`, e);
                 }
-            } catch (e) {
-                console.error(`❌ [ERROR] Processing schedule:`, e);
+            }
+        }
+
+        if (scheduledCheckCount % 6 === 0) { // Log every 60 seconds
+            const scheduledCount = scheduled ? scheduled.length : 0;
+            const dailyCount = dailySchedules ? dailySchedules.length : 0;
+            if (scheduledCount === 0 && dailyCount === 0) {
+                console.log(`🔍 [SCHEDULED CHECK #${scheduledCheckCount}] No scheduled tournaments found`);
             }
         }
     } catch (e) {

@@ -394,6 +394,45 @@
         }
 
 
+        /* Congratulations Animation */
+        @keyframes celebrate {
+            0% {
+                transform: scale(0) rotate(0deg);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.2) rotate(180deg);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1) rotate(360deg);
+                opacity: 1;
+            }
+        }
+
+        @keyframes confetti {
+            0% {
+                transform: translateY(0) translateX(0) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-200px) translateX(var(--move-x)) rotate(720deg);
+                opacity: 0;
+            }
+        }
+
+        .congrats-animation {
+            animation: celebrate 0.8s ease-out;
+        }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #FFD700;
+            animation: confetti 2s ease-out forwards;
+        }
+
         /* Stats Container (Above Hearts) */
         .stats-container {
             display: flex;
@@ -609,21 +648,12 @@
 
         <!-- SCREEN: RESULT -->
         <div id="screen-result" class="screen">
-            <div class="ui-panel">
-                <h1 id="result-title">WINNER!</h1>
+            <div class="ui-panel" style="position: relative; overflow: hidden;">
+                <h1 id="result-title" class="congrats-animation">CONGRATULATIONS!</h1>
                 <div id="result-icon" style="font-size: 5rem; margin: 10px 0;">🎉</div>
                 <div id="result-message" style="margin: 10px 0; font-size: 1.2rem; color: #94a3b8;"></div>
 
-                <div id="reward-box"
-                    style="background: rgba(34, 197, 94, 0.1); border: 2px dashed #22c55e; padding: 15px; border-radius: 15px; margin: 20px 0;">
-                    <div style="font-size: 0.9rem; color: #22c55e;">YOUR REWARD</div>
-                    <div id="loot-gain" style="font-size: 2.5rem; color: #22c55e; font-weight: bold;">₹10,000</div>
-                    <div id="code-display"
-                        style="font-size: 1.2rem; background: #fff; color: #000; padding: 8px; margin-top: 8px; border-radius: 5px; letter-spacing: 2px; font-family: monospace;">
-                        VAULT2024</div>
-                </div>
-
-                <button class="btn retry" onclick="Game.resetToGame()">CLAIM & TRY AGAIN</button>
+                <button class="btn retry" onclick="Game.resetToGame()">TRY AGAIN</button>
             </div>
         </div>
     </div>
@@ -680,7 +710,7 @@
                     document.getElementById('game-trys-display').style.color = "#4ade80"; // Green
                 } else {
                     this.updateUI();
-                    this.checkTrys(); // Check immediately on enter
+                    // Don't check trys on page load - only check when user clicks START button
                 }
             },
 
@@ -908,31 +938,32 @@
                 return `${String(s).padStart(2, '0')}.${String(m).padStart(3, '0')}`;
             },
 
-            finishLevel(success, message, rewardType, rewardVal) {
+            finishLevel(success, message) {
                 this.state = 'RESULT';
                 this.switchScreen('screen-result');
                 const title = document.getElementById('result-title');
                 const msg = document.getElementById('result-message');
-                const lootDisplay = document.getElementById('loot-gain');
-                const codeDisplay = document.getElementById('code-display');
                 const icon = document.getElementById('result-icon');
-                const rewardBox = document.getElementById('reward-box');
+                const panel = document.querySelector('#screen-result .ui-panel');
 
                 if (success) {
-                    title.innerText = "🎊 JACKPOT! 🎊";
+                    // Remove old animation class and add new one
+                    title.classList.remove('congrats-animation');
+                    void title.offsetWidth; // Trigger reflow
+                    title.classList.add('congrats-animation');
+                    
+                    title.innerText = "CONGRATULATIONS!";
                     title.style.color = "#22c55e";
-                    icon.innerText = "💰";
-                    msg.innerHTML = "PERFECT TIMING!<br>You cracked the vault!";
-                    lootDisplay.innerText = rewardVal || "₹10,000";
-                    codeDisplay.innerText = "CODE: " + this.generateCode();
-                    codeDisplay.style.display = "block";
-                    rewardBox.style.display = "block";
+                    icon.innerText = "🎉";
+                    msg.innerHTML = "PERFECT TIMING!<br>You got it EXACT!";
+                    
+                    // Create confetti effect
+                    this.createConfetti(panel);
                 } else {
                     title.innerText = "SO CLOSE!";
                     title.style.color = "#ef4444";
                     icon.innerText = "😢";
                     msg.innerHTML = message;
-                    rewardBox.style.display = "none";
                 }
 
                 // --- HIGH REVENUE: SHOW AD ON RESULT ---
@@ -943,21 +974,31 @@
                 // ---------------------------------------
             },
 
-            generateCode() {
-                const prefix = ["WIN", "VAULT", "PRIZE", "LUCKY"][Math.floor(Math.random() * 4)];
-                const num = Math.floor(10000 + Math.random() * 90000);
-                return prefix + num;
+            createConfetti(container) {
+                const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
+                for (let i = 0; i < 50; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    const randomX = (Math.random() - 0.5) * 150; // -75px to 75px
+                    confetti.style.setProperty('--move-x', randomX + 'px');
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.top = '20%';
+                    confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    confetti.style.animationDelay = Math.random() * 0.8 + 's';
+                    confetti.style.animationDuration = (Math.random() * 1 + 1.5) + 's';
+                    confetti.style.width = Math.random() * 10 + 8 + 'px';
+                    confetti.style.height = confetti.style.width;
+                    confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '0%';
+                    container.appendChild(confetti);
+                    
+                    setTimeout(() => confetti.remove(), 3000);
+                }
             },
 
             resetToGame() {
-                // Check if coming from tournament page - skip health check here
-                // Health check will happen when user clicks START button
-                const skipCheck = localStorage.getItem('skip_health_check') === 'true';
-                if (!skipCheck) {
-                    // Only check if not coming from tournament page
-                    if (!TrysManager.checkTrys()) return;
-                } else {
-                    // Clear the flag
+                // Health check will happen when user clicks START button, not here
+                // Clear skip flag if exists
+                if (localStorage.getItem('skip_health_check') === 'true') {
                     localStorage.removeItem('skip_health_check');
                 }
 
@@ -1123,67 +1164,31 @@
 
             handleServerResult(data) {
                 const diffMs = data.d;
-                const playerTimeMs = data.ft;
-                const targetMs = data.tt;
-                const playerTimeStr = Game.formatTime(playerTimeMs);
-                const targetStr = Game.formatTime(targetMs);
+                const playerTimeStr = Game.formatTime(data.ft);
+                const targetStr = Game.formatTime(data.tt);
                 const rank = data.r;
                 const bestScore = data.bs;
                 const newRecord = data.nr === 1;
                 const isWin = data.w === 1;
-                const isExact = diffMs === 0;
 
                 this.state = 'IDLE';
                 this.elements.displayTimer.innerText = playerTimeStr;
 
                 if (rank) document.getElementById('rank-display').innerText = `RANK: #${rank}`;
-                if (bestScore !== null && bestScore !== undefined) {
-                    document.getElementById('best-display').innerText = bestScore === 0 ? `BEST: EXACT!` : `BEST: ${bestScore}ms`;
-                }
+                if (bestScore) document.getElementById('best-display').innerText = `BEST: ${bestScore}ms`;
 
-                if (isExact) {
-                    // 🎯 EXACT MATCH!
+                if (isWin) {
                     this.elements.displayTimer.style.color = "#22c55e";
-                    this.elements.diffBadge.style.display = "inline-block";
-                    this.elements.diffBadge.innerText = "🎯 EXACT!";
-                    this.elements.diffBadge.style.background = "linear-gradient(135deg, #22c55e, #16a34a)";
-                    this.elements.diffBadge.style.color = "#fff";
-                    this.elements.diffBadge.style.fontSize = "1.2rem";
-                    this.elements.diffBadge.classList.add('new-record-anim');
-
-                    this.elements.timerBox.style.borderColor = "#22c55e";
-
-                    // Show target & actual in status
-                    this.elements.status.innerHTML = `🎯 <b style="color:#22c55e;font-size:1.3rem;">PERFECT MATCH!</b><br>` +
-                        `<span style="color:#94a3b8">Target: <b style="color:#FFD700">${targetStr}s</b> | You: <b style="color:#22c55e">${playerTimeStr}s</b></span>`;
-
-                    // Also show jackpot reward
-                    const rewards = [
-                        { type: "CASH", val: "₹1,00,000" },
-                        { type: "VOUCHER", val: "₹50,000 Amazon" },
-                        { type: "GIFT", val: "₹25,000 Gift Card" }
-                    ];
-                    const reward = rewards[Math.floor(Math.random() * rewards.length)];
-                    Game.finishLevel(true, "", reward.type, reward.val);
+                    Game.finishLevel(true, "PERFECT TIMING!");
                 } else {
-                    // Not exact - show difference
+                    // Handle Loss
 
                     if (diffMs < Game.bestMiss) Game.bestMiss = diffMs;
 
                     this.elements.displayTimer.innerHTML = Game.colorizeDigits(targetStr, playerTimeStr);
 
                     this.elements.diffBadge.style.display = "inline-block";
-                    // Reset any previous exact-match styling
-                    this.elements.diffBadge.style.background = "";
-                    this.elements.diffBadge.style.color = "";
-                    this.elements.diffBadge.style.fontSize = "";
-
-                    if (newRecord) {
-                        this.elements.diffBadge.classList.add('new-record-anim');
-                        this.elements.diffBadge.innerText = `NEW BEST: ${diffMs}ms!`;
-                    } else {
-                        this.elements.diffBadge.innerText = `OFF BY ${diffMs}ms`;
-                    }
+                    this.elements.diffBadge.innerText = `OFF BY ${diffMs}ms`;
 
                     this.elements.timerBox.style.borderColor = "#ef4444";
                     this.elements.timerBox.classList.add('pulse');
@@ -1193,22 +1198,21 @@
                     this.elements.btn.className = "btn retry";
                     this.elements.btn.disabled = false;
 
-                    // Show target & actual time + motivational message
-                    let msg = `<span style="color:#94a3b8;font-size:0.9rem;">Target: <b style="color:#FFD700">${targetStr}s</b> | You: <b style="color:#e2e8f0">${playerTimeStr}s</b></span><br>`;
+                    // Specific logic for message if needed?
+                    let msg = "";
                     if (newRecord) {
-                        msg += `🔥 <b style="color:#FFD700">NEW HIGH SCORE!</b> Rank #${rank}!`;
-                    } else if (diffMs < 5) {
-                        msg += `😱 <b>SO CLOSE!</b> Just ${diffMs}ms off!`;
-                    } else if (diffMs < 20) {
-                        msg += `💪 <b>Almost there!</b> ${diffMs}ms difference`;
+                        msg = `🔥 NEW HIGH SCORE! 🔥<br><b>You jumped to Rank #${rank}!</b>`;
+                        this.elements.diffBadge.classList.add('new-record-anim');
+                        this.elements.diffBadge.innerText = `NEW BEST: ${diffMs}ms!`;
+                    } else if (diffMs < 10) {
+                        msg = `😱 OFF BY A WHISKER!<br><b>Just ${diffMs}ms difference!</b>`;
                     } else {
-                        msg += `⏱️ Off by <b>${diffMs}ms</b> — watch the last digit!`;
+                        msg = `💪 Getting closer!<br><b>Watch the last digit carefully!</b>`;
                     }
                     this.elements.status.innerHTML = msg;
                     this.elements.status.style.color = newRecord ? "#FFD700" : "#ef4444";
                 }
             }
-
         };
 
         Game.init();
