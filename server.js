@@ -1203,9 +1203,9 @@ function startTournamentCheck() {
     tournamentCheckInterval = setInterval(async () => {
         autoCheckCount++;
 
-        // Check if current tournament is a CUSTOM (scheduled/manual) tournament
+        // Check if current tournament is a CUSTOM (scheduled/manual/daily) tournament
         const isCustomTournament = currentTournamentKey &&
-            (currentTournamentKey.includes('_scheduled_') || currentTournamentKey.includes('_manual_'));
+            (currentTournamentKey.includes('_scheduled_') || currentTournamentKey.includes('_manual_') || currentTournamentKey.includes('_daily_'));
 
         if (isCustomTournament) {
             // --- CUSTOM TOURNAMENT HANDLING ---
@@ -1480,6 +1480,7 @@ async function archiveTournamentToSupabase(tournamentId, winners) {
         // 3. Get tournament timing info
         const custom = await getCustomTournamentTiming(tournamentId);
         const tournamentType = tournamentId.includes('_scheduled_') ? 'scheduled' :
+            tournamentId.includes('_daily_') ? 'daily' :
             tournamentId.includes('_manual_') ? 'manual' : 'auto';
 
         // 4. Get target time for this tournament
