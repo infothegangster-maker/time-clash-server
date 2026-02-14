@@ -1731,7 +1731,8 @@ io.on('connection', (socket) => {
                     console.log(`🎯 Using existing target for tournament ${currentTournamentId}: ${targetTime}ms`);
                 } else {
                     // Generate new target for this tournament and store it
-                    targetTime = Math.floor(Math.random() * 9000) + 1000;
+                    // Tournament target time: 2 seconds (2000ms) to 3.5 seconds (3500ms)
+                    targetTime = Math.floor(Math.random() * 1500) + 2000;
                     // Store it with tournament duration expiry (use longer expiry for custom tournaments)
                     const expirySeconds = Math.ceil(TOURNAMENT_DURATION_MS / 1000) + 60; // Add 60s buffer
                     await redis.setex(targetKey1, expirySeconds, targetTime.toString());
@@ -1740,12 +1741,12 @@ io.on('connection', (socket) => {
                 }
             } catch (e) {
                 console.error("❌ Error getting/setting tournament target:", e);
-                // Fallback to random if Redis fails
-                targetTime = Math.floor(Math.random() * 9000) + 1000;
+                // Fallback to random if Redis fails (2-3.5 seconds)
+                targetTime = Math.floor(Math.random() * 1500) + 2000;
             }
         } else {
-            // Practice mode: random target per user
-            targetTime = Math.floor(Math.random() * 9000) + 1000;
+            // Practice mode: random target per user (2-3.5 seconds)
+            targetTime = Math.floor(Math.random() * 1500) + 2000;
         }
 
         // Fetch Best Score & Rank for CURRENT Tournament (ONLY IF TOURNAMENT MODE)
