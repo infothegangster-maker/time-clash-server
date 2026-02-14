@@ -395,7 +395,7 @@
 
                                         <!-- Main Viz (Timer/Results) -->
                                         <div
-                                            class="relative flex-1 min-h-[350px] rounded-xl overflow-hidden border border-violet-500/30 shadow-[inset_0_0_50px_rgba(0,0,0,0.9)] flex items-center justify-center mb-4">
+                                            class="relative flex-1 min-h-[200px] max-h-[400px] rounded-xl overflow-hidden border border-violet-500/30 shadow-[inset_0_0_50px_rgba(0,0,0,0.9)] flex items-center justify-center mb-6">
                                             <!-- Background FX -->
                                             <div
                                                 class="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-violet-900/40 via-transparent to-transparent">
@@ -687,7 +687,7 @@
             }
         }
 
-        // Display tournament results in leaderboard
+        // Display tournament results in leaderboard - REDESIGNED FULL HEIGHT
         function displayTournamentResults(data) {
             const display = document.getElementById('countdown');
             if (!display) return;
@@ -695,102 +695,175 @@
             const { winners, targetTime, userRank } = data;
 
             // Format target time
-            let targetSeconds = 0;
-            let targetMilliseconds = 0;
             let targetTimeStr = 'N/A';
-
             if (targetTime) {
-                targetSeconds = Math.floor(targetTime / 1000);
-                targetMilliseconds = Math.floor(targetTime % 1000);
-                targetTimeStr = `${String(targetSeconds).padStart(2, '0')}.${String(targetMilliseconds).padStart(3, '0')}`;
+                const seconds = Math.floor(targetTime / 1000);
+                const milliseconds = Math.floor(targetTime % 1000);
+                targetTimeStr = `${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
             }
 
-            // Format winners
+            // Format winners list
             let winnersHtml = '';
             if (winners && winners.length > 0) {
                 winners.forEach((winner, index) => {
                     const rank = index + 1;
                     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
 
-                    // SCORE IS THE DIFFERENCE!
-                    const diff = winner.score;
-                    const diffStr = `${diff}ms`;
+                    // Winner Time
+                    const wSeconds = Math.floor(winner.score / 1000);
+                    const wMilliseconds = Math.floor(winner.score % 1000);
+                    const timeStr = `${String(wSeconds).padStart(2, '0')}.${String(wMilliseconds).padStart(3, '0')}`;
 
-                    // We don't have exact user time, but for leaderboard it's Target +/- Diff
-                    // We will display the DIFF prominently as that's the ranking metric
+                    // Diff Calculation
+                    let diffStr = 'N/A';
+                    if (targetTime) {
+                        const diff = Math.abs(winner.score - targetTime);
+                        diffStr = `+${diff}ms`; // Explicitly show it's a difference
+                    }
+
+                    // Name truncation
+                    let name = winner.username || winner.userId.substring(0, 8);
+                    if (name.length > 12) name = name.substring(0, 10) + '...';
 
                     winnersHtml += `
-                        <div style="display: flex; align-items: center; padding: 12px 10px; margin-bottom: 8px; background: rgba(0,0,0,0.3); border-radius: 12px; border: 1px solid rgba(139, 92, 246, 0.2);">
-                            <div style="font-size: 1.5rem; margin-right: 12px;">${medal}</div>
-                            <div style="flex: 1;">
-                                <div style="font-weight: 700; color: #fff; font-size: 1rem; letter-spacing: 0.5px;">${winner.username || winner.userId.substring(0, 8)}</div>
-                                <div style="font-size: 0.75rem; color: #a78bfa;">Rank #${rank}</div>
+                        <div style="
+                            display: flex; 
+                            align-items: center; 
+                            padding: 12px 15px; 
+                            margin-bottom: 8px; 
+                            background: rgba(255,255,255,0.03); 
+                            border-radius: 12px; 
+                            border: 1px solid rgba(255,255,255,0.05);
+                        ">
+                            <!-- Rank & Medal -->
+                            <div style="width: 40px; font-size: 1.2rem; text-align: center;">${medal}</div>
+                            
+                            <!-- Name -->
+                            <div style="flex: 1; padding-left: 10px;">
+                                <div style="font-weight: 600; color: #fff; font-size: 1rem;">${name}</div>
+                                <div style="font-size: 0.75rem; color: #64748b;">Rank #${rank}</div>
                             </div>
+                            
+                            <!-- Stats (Right Aligned) -->
                             <div style="text-align: right;">
-                                <div style="font-family: 'Teko', sans-serif; font-size: 1.4rem; color: #fbbf24; line-height: 1;">+${diffStr}</div>
-                                <div style="font-size: 0.7rem; color: #94a3b8;">OFFSET</div>
+                                <div style="font-family: 'Roboto Mono', monospace; font-size: 1rem; color: #FFD700; font-weight: 700;">${timeStr}</div>
+                                <div style="font-size: 0.8rem; color: #ef4444; font-weight: 500;">${diffStr}</div>
                             </div>
                         </div>
                     `;
                 });
             } else {
                 winnersHtml = `
-                    <div style="text-align: center; padding: 30px; opacity: 0.6;">
-                        <div style="font-size: 3rem; margin-bottom: 10px;">⏳</div>
-                        <div style="color: #cbd5e1;">Waiting for players...</div>
+                    <div style="text-align: center; color: #94a3b8; padding: 40px 20px;">
+                        <div style="font-size: 2rem; margin-bottom: 10px;">📉</div>
+                        No winners yet for this round!
                     </div>
                 `;
             }
 
-            // User rank
+            // User Rank Section (Sticky at bottom if needed, but here inline)
             let userRankHtml = '';
             if (userRank && userRank.rank) {
-                const uDiff = userRank.score;
-                const uDiffStr = `${uDiff}ms`;
+                const uSeconds = Math.floor(userRank.score / 1000);
+                const uMilliseconds = Math.floor(userRank.score % 1000);
+                const uTimeStr = `${String(uSeconds).padStart(2, '0')}.${String(uMilliseconds).padStart(3, '0')}`;
+
+                let uDiffStr = 'N/A';
+                if (targetTime) {
+                    const uDiff = Math.abs(userRank.score - targetTime);
+                    uDiffStr = `+${uDiff}ms`;
+                }
 
                 userRankHtml = `
-                    <div style="margin-top: 15px; padding: 15px; background: linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(139, 92, 246, 0.1)); border-radius: 16px; border: 1px solid rgba(139, 92, 246, 0.4);">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                            <div style="font-size: 0.8rem; color: #c4b5fd; text-transform: uppercase; font-weight: 700;">YOUR PERFORMANCE</div>
-                            <div style="background: #7c3aed; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">#${userRank.rank}</div>
+                    <div style="
+                        margin-top: 20px; 
+                        padding: 15px; 
+                        background: rgba(59, 130, 246, 0.15); 
+                        border-radius: 15px; 
+                        border: 1px solid rgba(59, 130, 246, 0.4);
+                        display: flex;
+                        align-items: center;
+                    ">
+                        <div style="width: 40px; font-size: 1.2rem; text-align: center;">👤</div>
+                        <div style="flex: 1; padding-left: 10px;">
+                            <div style="font-weight: 700; color: #60a5fa; font-size: 1rem;">YOU</div>
+                            <div style="font-size: 0.75rem; color: #93c5fd;">Rank #${userRank.rank}</div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                            <div style="font-size: 1.1rem; color: white;">Target: <span style="font-family: 'Roboto Mono', monospace;">${targetTimeStr}</span></div>
-                            <div style="font-family: 'Teko', sans-serif; font-size: 1.8rem; color: #fff; line-height: 1;">+${uDiffStr}</div>
+                        <div style="text-align: right;">
+                            <div style="font-family: 'Roboto Mono', monospace; font-size: 1rem; color: #60a5fa; font-weight: 700;">${uTimeStr}</div>
+                            <div style="font-size: 0.8rem; color: #ef4444; font-weight: 500;">${uDiffStr}</div>
                         </div>
                     </div>
                 `;
             }
 
-            // Countdown
+            // Countdown Logic
             const remaining = window.leaderboardTimeLeft || 0;
             const m = Math.floor(remaining / 60);
             const s = remaining % 60;
 
+            // FULL HEIGHT LAYOUT
             display.innerHTML = `
-                <div style="width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden;">
-                    
-                    <!-- TARGET HEADER -->
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <div style="font-size: 0.8rem; color: #c4b5fd; letter-spacing: 2px; margin-bottom: 0px;">TARGET TIME</div>
-                        <div style="font-family: 'Teko', sans-serif; font-size: 4rem; text-shadow: 0 0 20px rgba(139, 92, 246, 0.6); line-height: 1; color: white;">
-                            ${targetTimeStr}
+                <div style="
+                    display: flex; 
+                    flex-direction: column; 
+                    height: 100%; 
+                    width: 100%; 
+                    padding: 20px;
+                    background: linear-gradient(to bottom, rgba(17,24,39,0.8), rgba(17,24,39,0.95));
+                ">
+                    <!-- HEADER: TARGET TIME -->
+                    <div style="text-align: center; margin-bottom: 20px; flex-shrink: 0;">
+                        <div style="font-size: 0.85rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px;">Target Time</div>
+                        <div style="
+                            font-family: 'Teko', sans-serif; 
+                            font-size: 4.5rem; 
+                            line-height: 1;
+                            font-weight: 700; 
+                            color: #FFD700;
+                            text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+                        ">${targetTimeStr}</div>
+                    </div>
+
+                    <!-- SCROLLABLE LIST AREA -->
+                    <div style="
+                        flex: 1; 
+                        overflow-y: auto; 
+                        min-height: 0; 
+                        padding-right: 5px;
+                        margin-bottom: 20px;
+                    ">
+                        
+                        <!-- List Header -->
+                        <div style="padding: 0 10px; margin-bottom: 10px; display: flex; font-size: 0.75rem; color: #64748b; font-weight: 600; text-transform: uppercase;">
+                            <div style="width: 50px;">Rank</div>
+                            <div style="flex: 1;">Player</div>
+                            <div style="text-align: right;">Time / Diff</div>
                         </div>
-                    </div>
 
-                    <!-- SCROLLABLE LIST -->
-                    <div style="flex: 1; overflow-y: auto; padding: 0 5px; scrollbar-width: none; -ms-overflow-style: none;">
                         ${winnersHtml}
+                        ${userRankHtml}
                     </div>
 
-                    <!-- FOOTER INFO -->
-                    ${userRankHtml}
-
-                    <div style="margin-top: 20px; text-align: center;">
-                         <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 2px;">NEXT ROUND IN</div>
-                         <div style="font-family: 'Teko', sans-serif; font-size: 2.5rem; color: #fbbf24; line-height: 1;">
+                    <!-- FOOTER: COUNTDOWN -->
+                    <div style="
+                        flex-shrink: 0; 
+                        padding-top: 15px; 
+                        border-top: 1px solid rgba(255,255,255,0.1);
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <div style="font-size: 0.9rem; color: #94a3b8;">Next Round:</div>
+                        <div style="
+                            font-family: 'Teko', sans-serif; 
+                            font-size: 2rem; 
+                            color: #fff; 
+                            font-weight: 600;
+                            letter-spacing: 1px;
+                        ">
                             ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}
-                         </div>
+                        </div>
                     </div>
                 </div>
             `;
