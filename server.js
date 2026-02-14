@@ -834,14 +834,27 @@ fastify.get('/api/tournament-results', async (req, reply) => {
             }
         }
 
-        // Get display names for winners
+        // Get display names and ACTUAL TIMES for winners
         for (let w of winners) {
             try {
+                // Fetch User Metadata
                 const meta = await redis.hgetall(`user_meta:${w.userId}`);
                 if (meta && meta.username) {
                     w.username = meta.username;
                     w.email = meta.email || '';
                 }
+
+                // Fetch Actual Time (stored separately)
+                const actualTime = await redis.hget(`tournament_times:${currentTournamentKey}`, w.userId);
+                if (actualTime) {
+                    w.actualTime = parseInt(actualTime);
+                } else if (targetTime) {
+                    // Fallback: Assume Overshoot if no time stored
+                    w.actualTime = parseInt(targetTime) + w.score;
+                } else {
+                    w.actualTime = w.score; // Worst case fallback
+                }
+
             } catch (e) { /* ignore */ }
             if (!w.username) {
                 const activeUser = Array.from(activeUsers.values()).find(u => u.userId === w.userId);
@@ -859,9 +872,15 @@ fastify.get('/api/tournament-results', async (req, reply) => {
             const userScore = await redis.zscore(currentTournamentKey, userId);
             if (userScore !== null) {
                 const rank = await redis.zrank(currentTournamentKey, userId);
+
+                // Fetch actual time for user
+                let actualTime = await redis.hget(`tournament_times:${currentTournamentKey}`, userId);
+                let finalTime = actualTime ? parseInt(actualTime) : (parseInt(targetTime || 0) + parseFloat(userScore));
+
                 userRank = {
                     rank: rank !== null ? rank + 1 : null,
-                    score: parseFloat(userScore)
+                    score: parseFloat(userScore),
+                    actualTime: finalTime
                 };
             }
         }
@@ -1894,6 +1913,10 @@ io.on('connection', (socket) => {
                     // but our manual check above covers it. 
                     // We overwrite because we already verified it's better.
                     await redis.zadd(currentTournamentId, diff, session.userId);
+
+                    // STORE ACTUAL TIME SEPARATELY (for display)
+                    // We need the actual time because zadd only stores difference
+                    await redis.hset(`tournament_times:${currentTournamentId}`, session.userId, serverDuration);
 
                     // Get Updated Rank
                     const rankIndex = await redis.zrank(currentTournamentId, session.userId);

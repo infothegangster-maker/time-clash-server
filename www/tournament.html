@@ -704,17 +704,15 @@
                     const rank = index + 1;
                     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
 
-                    // Winner Time
-                    const wSeconds = Math.floor(winner.score / 1000);
-                    const wMilliseconds = Math.floor(winner.score % 1000);
+                    // Winner Time (Use Actual Time passed from server, fallback to score/target logic if missing)
+                    const timeVal = winner.actualTime || (targetTime ? targetTime + winner.score : winner.score);
+                    const wSeconds = Math.floor(timeVal / 1000);
+                    const wMilliseconds = Math.floor(timeVal % 1000);
                     const timeStr = `${String(wSeconds).padStart(2, '0')}.${String(wMilliseconds).padStart(3, '0')}`;
 
-                    // Diff Calculation
-                    let diffStr = 'N/A';
-                    if (targetTime) {
-                        const diff = Math.abs(winner.score - targetTime);
-                        diffStr = `+${diff}ms`; // Explicitly show it's a difference
-                    }
+                    // Diff Calculation (Score IS the difference)
+                    const diffVal = winner.score;
+                    const diffStr = `+${diffVal}ms`;
 
                     // Name truncation
                     let name = winner.username || winner.userId.substring(0, 8);
@@ -759,15 +757,13 @@
             // User Rank Section (Sticky at bottom if needed, but here inline)
             let userRankHtml = '';
             if (userRank && userRank.rank) {
-                const uSeconds = Math.floor(userRank.score / 1000);
-                const uMilliseconds = Math.floor(userRank.score % 1000);
+                const uTimeVal = userRank.actualTime || (targetTime ? targetTime + userRank.score : userRank.score);
+                const uSeconds = Math.floor(uTimeVal / 1000);
+                const uMilliseconds = Math.floor(uTimeVal % 1000);
                 const uTimeStr = `${String(uSeconds).padStart(2, '0')}.${String(uMilliseconds).padStart(3, '0')}`;
 
-                let uDiffStr = 'N/A';
-                if (targetTime) {
-                    const uDiff = Math.abs(userRank.score - targetTime);
-                    uDiffStr = `+${uDiff}ms`;
-                }
+                const uDiffVal = userRank.score;
+                const uDiffStr = `+${uDiffVal}ms`;
 
                 userRankHtml = `
                     <div style="
@@ -792,10 +788,11 @@
                 `;
             }
 
-            // Countdown Logic
-            const remaining = window.leaderboardTimeLeft || 0;
-            const m = Math.floor(remaining / 60);
-            const s = remaining % 60;
+            // Countdown Logic (Fix: Convert MS to Seconds first)
+            const remainingMS = window.leaderboardTimeLeft || 0;
+            const remainingSeconds = Math.floor(remainingMS / 1000);
+            const m = Math.floor(remainingSeconds / 60);
+            const s = remainingSeconds % 60;
 
             // FULL HEIGHT LAYOUT
             display.innerHTML = `
