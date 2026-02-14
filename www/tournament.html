@@ -539,6 +539,8 @@
 
                 // Make sure we have an active tournament
                 hasActiveTournament = true;
+                // Capture rewards
+                window.activeRewards = data.rw || [];
                 stopScheduledCountdown();
 
                 // HANDLE PHASES
@@ -644,6 +646,33 @@
 
                 display.innerText = `Ends in: ${timeStr}`;
                 if (nextTourDisplay) nextTourDisplay.innerText = timeStr;
+
+                // Show Prize Pool if available
+                if (window.activeRewards && window.activeRewards.length > 0) {
+                    let poolHtml = `
+                        <div style="margin-top: 20px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                            <div style="font-size: 0.9rem; color: #FFD700; margin-bottom: 10px; font-weight: 600; letter-spacing: 1px;">🏆 CURRENT PRIZES</div>
+                            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                                ${window.activeRewards.map(r => `
+                                    <div style="background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,0.1); min-width: 120px;">
+                                        <div style="font-size: 1.2rem;">${r.img && r.img.startsWith('http') ? `<img src="${r.img}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;">` : '🎁'}</div>
+                                        <div style="text-align: left;">
+                                            <div style="font-size: 0.85rem; color: #fff; font-weight: 700;">${r.name}</div>
+                                            <div style="font-size: 0.7rem; color: #94a3b8;">Rank ${r.min}${r.min !== r.max ? '-' + r.max : ''}</div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                    // Check if already appended to avoid jitter (or just clear and re-append if simple)
+                    // For simplicity, we can append to display parent or a specific container.
+                    // Actually, 'display' is #countdown. Let's append formatted string + prizes to innerHTML
+                    display.innerHTML = `
+                        <div>Ends in: ${timeStr}</div>
+                        ${poolHtml}
+                    `;
+                }
 
                 secondsRemaining--;
             };

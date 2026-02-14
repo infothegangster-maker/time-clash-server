@@ -1873,6 +1873,13 @@ io.on('connection', (socket) => {
         const phase = await getTournamentPhase(currentTournamentId);
         const lbTimeLeft = await getLeaderboardTimeLeft(currentTournamentId);
 
+        // Fetch Rewards for active tournament
+        let activeRewards = [];
+        try {
+            const rRaw = await redis.hget(`tournament:info:${currentTournamentId}`, 'rewards');
+            if (rRaw) activeRewards = JSON.parse(rRaw);
+        } catch (e) { /* ignore */ }
+
         socket.emit('grd', {
             t: targetTime,
             b: bestScore !== null ? bestScore : -1,
@@ -1880,7 +1887,8 @@ io.on('connection', (socket) => {
             tl: timeLeft,
             tid: currentTournamentId,
             ph: phase,
-            ltl: lbTimeLeft
+            ltl: lbTimeLeft,
+            rw: activeRewards // Send Rewards
         });
     });
 
