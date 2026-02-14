@@ -371,7 +371,8 @@
                                 <div
                                     class="absolute inset-[2px] rounded-2xl bg-gradient-to-b from-slate-900 via-violet-950/90 to-slate-950 overflow-hidden">
 
-                                    <div class="relative h-full p-6 flex flex-col pointer-events-none z-[60]">
+                                    <div id="tournament-card-content"
+                                        class="relative h-full p-6 flex flex-col pointer-events-none z-[60]">
                                         <!-- High Z for Interaction -->
 
                                         <!-- BACK BUTTON INSIDE CARD -->
@@ -434,6 +435,26 @@
         let hasActiveTournament = false;
         let nextScheduledTournament = null;
         let scheduledCountdownInterval = null;
+        let initialCardHTML = ''; // Store initial lobby HTML
+
+        // Capture initial HTML for restoration
+        document.addEventListener('DOMContentLoaded', () => {
+            const card = document.getElementById('tournament-card-content');
+            if (card) initialCardHTML = card.innerHTML;
+        });
+
+        // Helper to restore Lobby UI
+        function restoreLobbyUI() {
+            if (!document.getElementById('action-area') && initialCardHTML) {
+                console.log("Restoring Lobby UI...");
+                const display = document.getElementById('tournament-card-content');
+                if (display) {
+                    display.innerHTML = initialCardHTML;
+                    // Reset pointer events if we changed them
+                    display.style.pointerEvents = 'none';
+                }
+            }
+        }
 
         function connectServer() {
             const toast = document.getElementById('message-toast');
@@ -503,6 +524,7 @@
                     startLeaderboardCountdown(data.ltl || 0);
                 } else {
                     // PLAYING PHASE (Default)
+                    restoreLobbyUI(); // Restore UI if coming from Leaderboard
                     // Show Enter Button
                     TrysManager.renderActionKey(true);
                     toast.style.display = 'none';
@@ -542,6 +564,7 @@
                     startLeaderboardCountdown(data.ltl || 0);
                 } else if (data.ph === 'p') {
                     // PLAYING PHASE - New tournament started!
+                    restoreLobbyUI(); // Restore UI if coming from Leaderboard
                     hasActiveTournament = true;
                     stopScheduledCountdown();
                     TrysManager.renderActionKey(true);
@@ -682,10 +705,13 @@
             }
         }
 
-        // Display tournament results in leaderboard - REDESIGNED FULL HEIGHT
+        // Display tournament results in leaderboard - REDESIGNED FULL SCREEN TAKEOVER
         function displayTournamentResults(data) {
-            const display = document.getElementById('countdown');
+            const display = document.getElementById('tournament-card-content');
             if (!display) return;
+
+            // Enable pointer events for interaction
+            display.style.pointerEvents = 'auto';
 
             const { winners, targetTime, userRank } = data;
 
@@ -794,15 +820,19 @@
             const m = Math.floor(remainingSeconds / 60);
             const s = remainingSeconds % 60;
 
-            // FULL HEIGHT LAYOUT
+            // FULL HEIGHT LAYOUT REPLACEMENT
             display.innerHTML = `
+                <!-- BACK BUTTON INSIDE CARD -->
+                <button class="back-btn" onclick="window.location.href='home.html'"
+                    style="position: absolute; top: 15px; left: 15px; z-index: 100; pointer-events: auto;">←
+                    HOME</button>
+
                 <div style="
                     display: flex; 
                     flex-direction: column; 
                     height: 100%; 
                     width: 100%; 
-                    padding: 20px;
-                    background: linear-gradient(to bottom, rgba(17,24,39,0.8), rgba(17,24,39,0.95));
+                    padding-top: 40px; 
                 ">
                     <!-- HEADER: TARGET TIME -->
                     <div style="text-align: center; margin-bottom: 20px; flex-shrink: 0;">
