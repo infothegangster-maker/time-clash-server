@@ -395,7 +395,7 @@
 
                                         <!-- Main Viz (Timer/Results) -->
                                         <div
-                                            class="relative flex-1 min-h-[200px] max-h-[400px] rounded-xl overflow-hidden border border-violet-500/30 shadow-[inset_0_0_50px_rgba(0,0,0,0.9)] flex items-center justify-center mb-6">
+                                            class="relative flex-1 min-h-[350px] rounded-xl overflow-hidden border border-violet-500/30 shadow-[inset_0_0_50px_rgba(0,0,0,0.9)] flex items-center justify-center mb-4">
                                             <!-- Background FX -->
                                             <div
                                                 class="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-violet-900/40 via-transparent to-transparent">
@@ -695,101 +695,102 @@
             const { winners, targetTime, userRank } = data;
 
             // Format target time
+            let targetSeconds = 0;
+            let targetMilliseconds = 0;
             let targetTimeStr = 'N/A';
+
             if (targetTime) {
-                const seconds = Math.floor(targetTime / 1000);
-                const milliseconds = Math.floor(targetTime % 1000);
-                targetTimeStr = `${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+                targetSeconds = Math.floor(targetTime / 1000);
+                targetMilliseconds = Math.floor(targetTime % 1000);
+                targetTimeStr = `${String(targetSeconds).padStart(2, '0')}.${String(targetMilliseconds).padStart(3, '0')}`;
             }
 
-            // Format winners with times and differences
+            // Format winners
             let winnersHtml = '';
             if (winners && winners.length > 0) {
                 winners.forEach((winner, index) => {
                     const rank = index + 1;
                     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
-                    const seconds = Math.floor(winner.score / 1000);
-                    const milliseconds = Math.floor(winner.score % 1000);
-                    const timeStr = `${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
 
-                    // Calculate difference from target
-                    let diffStr = 'N/A';
-                    if (targetTime) {
-                        const diff = Math.abs(winner.score - targetTime);
-                        diffStr = `${diff}ms`;
-                    }
+                    // SCORE IS THE DIFFERENCE!
+                    const diff = winner.score;
+                    const diffStr = `${diff}ms`;
 
-                    // SWAPPED: Show DIFF as primary (Gold), Time as secondary
+                    // We don't have exact user time, but for leaderboard it's Target +/- Diff
+                    // We will display the DIFF prominently as that's the ranking metric
+
                     winnersHtml += `
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; margin-bottom: 4px; background: rgba(255,255,255,0.05); border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
-                            <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
-                                <span style="font-size: 1.1rem;">${medal}</span>
-                                <div>
-                                    <div style="font-weight: 600; color: #fff; font-size: 0.85rem;">${winner.username || winner.userId.substring(0, 8)}</div>
-                                </div>
+                        <div style="display: flex; align-items: center; padding: 12px 10px; margin-bottom: 8px; background: rgba(0,0,0,0.3); border-radius: 12px; border: 1px solid rgba(139, 92, 246, 0.2);">
+                            <div style="font-size: 1.5rem; margin-right: 12px;">${medal}</div>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 700; color: #fff; font-size: 1rem; letter-spacing: 0.5px;">${winner.username || winner.userId.substring(0, 8)}</div>
+                                <div style="font-size: 0.75rem; color: #a78bfa;">Rank #${rank}</div>
                             </div>
                             <div style="text-align: right;">
-                                <div style="font-family: 'Roboto Mono', monospace; font-size: 0.95rem; color: #FFD700; font-weight: 700;">${diffStr}</div>
-                                <div style="font-size: 0.65rem; color: #94a3b8;">${timeStr}</div>
+                                <div style="font-family: 'Teko', sans-serif; font-size: 1.4rem; color: #fbbf24; line-height: 1;">+${diffStr}</div>
+                                <div style="font-size: 0.7rem; color: #94a3b8;">OFFSET</div>
                             </div>
                         </div>
                     `;
                 });
             } else {
-                winnersHtml = '<div style="text-align: center; color: #94a3b8; padding: 8px; font-size: 0.8rem;">No winners yet</div>';
+                winnersHtml = `
+                    <div style="text-align: center; padding: 30px; opacity: 0.6;">
+                        <div style="font-size: 3rem; margin-bottom: 10px;">⏳</div>
+                        <div style="color: #cbd5e1;">Waiting for players...</div>
+                    </div>
+                `;
             }
 
-            // User rank display
+            // User rank
             let userRankHtml = '';
             if (userRank && userRank.rank) {
-                const userSeconds = Math.floor(userRank.score / 1000);
-                const userMilliseconds = Math.floor(userRank.score % 1000);
-                const userTimeStr = `${String(userSeconds).padStart(2, '0')}.${String(userMilliseconds).padStart(3, '0')}`;
-                let userDiffStr = 'N/A';
-                if (targetTime) {
-                    const userDiff = Math.abs(userRank.score - targetTime);
-                    userDiffStr = `${userDiff}ms`;
-                }
+                const uDiff = userRank.score;
+                const uDiffStr = `${uDiff}ms`;
 
                 userRankHtml = `
-                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.3);">
-                            <div>
-                                <div style="font-weight: 600; color: #60a5fa; font-size: 0.9rem;">Rank #${userRank.rank}</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="font-family: 'Roboto Mono', monospace; font-size: 0.95rem; color: #60a5fa; font-weight: 600;">${userDiffStr}</div>
-                                <div style="font-size: 0.65rem; color: #94a3b8;">${userTimeStr}</div>
-                            </div>
+                    <div style="margin-top: 15px; padding: 15px; background: linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(139, 92, 246, 0.1)); border-radius: 16px; border: 1px solid rgba(139, 92, 246, 0.4);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <div style="font-size: 0.8rem; color: #c4b5fd; text-transform: uppercase; font-weight: 700;">YOUR PERFORMANCE</div>
+                            <div style="background: #7c3aed; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">#${userRank.rank}</div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                            <div style="font-size: 1.1rem; color: white;">Target: <span style="font-family: 'Roboto Mono', monospace;">${targetTimeStr}</span></div>
+                            <div style="font-family: 'Teko', sans-serif; font-size: 1.8rem; color: #fff; line-height: 1;">+${uDiffStr}</div>
                         </div>
                     </div>
                 `;
             }
 
-            // Get remaining time
+            // Countdown
             const remaining = window.leaderboardTimeLeft || 0;
             const m = Math.floor(remaining / 60);
             const s = remaining % 60;
 
-            // REMOVED max-height and reduced padding to fit perfectly in 400px container
             display.innerHTML = `
-                <div style="text-align: center; padding: 10px; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden;">
                     
-                    <div style="margin-bottom: 2px;">
-                        <div style="font-size: 1rem; color: #fbbf24; font-weight: 700;">🏆 Results</div>
-                        <div style="font-size: 0.7rem; color: #FFD700; text-transform: uppercase;">Target: <span style="font-family: 'Roboto Mono'; font-size: 0.9rem;">${targetTimeStr}</span></div>
-                    </div>
-
-                    <div style="flex: 1; overflow-y: auto; overflow-x: hidden; margin: 5px 0;">
-                        ${winnersHtml}
-                        ${userRankHtml}
-                    </div>
-
-                    <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.1);">
-                        <div style="font-size: 0.7rem; color: #94a3b8;">Next Round</div>
-                        <div style="font-size: 1.3rem; color: #FFD700; font-weight: 700; font-family: 'Teko', sans-serif;">
-                            ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}
+                    <!-- TARGET HEADER -->
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <div style="font-size: 0.8rem; color: #c4b5fd; letter-spacing: 2px; margin-bottom: 0px;">TARGET TIME</div>
+                        <div style="font-family: 'Teko', sans-serif; font-size: 4rem; text-shadow: 0 0 20px rgba(139, 92, 246, 0.6); line-height: 1; color: white;">
+                            ${targetTimeStr}
                         </div>
+                    </div>
+
+                    <!-- SCROLLABLE LIST -->
+                    <div style="flex: 1; overflow-y: auto; padding: 0 5px; scrollbar-width: none; -ms-overflow-style: none;">
+                        ${winnersHtml}
+                    </div>
+
+                    <!-- FOOTER INFO -->
+                    ${userRankHtml}
+
+                    <div style="margin-top: 20px; text-align: center;">
+                         <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 2px;">NEXT ROUND IN</div>
+                         <div style="font-family: 'Teko', sans-serif; font-size: 2.5rem; color: #fbbf24; line-height: 1;">
+                            ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}
+                         </div>
                     </div>
                 </div>
             `;
