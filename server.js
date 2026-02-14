@@ -703,7 +703,7 @@ fastify.delete('/api/admin/reward-configs/:scheduleId', async (req, reply) => {
     }
 });
 
-// Helper: Create Supabase tables for rewards (run once)
+// Helper: Create/Fix Supabase tables for rewards (run once)
 fastify.post('/api/admin/setup-reward-tables', async (req, reply) => {
     if (!supabase) return { error: 'Supabase not configured' };
 
@@ -716,17 +716,22 @@ fastify.post('/api/admin/setup-reward-tables', async (req, reply) => {
         if (testError1 && testError1.code === '42P01') missing.push('user_rewards');
         if (testError2 && testError2.code === '42P01') missing.push('tournament_reward_configs');
 
-        if (missing.length === 0) {
-            return { success: true, message: 'All reward tables exist!', tables: ['user_rewards', 'tournament_reward_configs'] };
-        }
+        // Check if user_id column type needs fixing (UUID → TEXT)
+        let needsColumnFix = false;
+        if (testError1 && testError1.code === '22P02') needsColumnFix = true;
 
         return {
-            success: false,
-            message: `Missing tables: ${missing.join(', ')}. Create them in Supabase SQL Editor:`,
+            success: missing.length === 0 && !needsColumnFix,
+            message: missing.length === 0 && !needsColumnFix
+                ? 'All reward tables exist and are correctly configured!'
+                : `Run this SQL in Supabase SQL Editor to create/fix tables:`,
+            tables: ['user_rewards', 'tournament_reward_configs'],
+            needsColumnFix,
             sql: `
--- User Rewards (won by players)
-CREATE TABLE IF NOT EXISTS user_rewards (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+-- STEP 1: Drop and recreate user_rewards with TEXT user_id (Firebase IDs are NOT UUIDs)
+DROP TABLE IF EXISTS user_rewards;
+CREATE TABLE user_rewards (
+    id BIGSERIAL PRIMARY KEY,
     user_id TEXT NOT NULL,
     tournament_id TEXT NOT NULL,
     reward_name TEXT NOT NULL,
@@ -738,9 +743,9 @@ CREATE TABLE IF NOT EXISTS user_rewards (
 CREATE INDEX IF NOT EXISTS idx_user_rewards_user ON user_rewards(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_rewards_tournament ON user_rewards(tournament_id);
 
--- Reward Configs (admin-defined, persistent)
+-- STEP 2: Create reward configs table (if not exists)
 CREATE TABLE IF NOT EXISTS tournament_reward_configs (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     schedule_id TEXT NOT NULL,
     name TEXT NOT NULL,
     image_url TEXT,
@@ -754,6 +759,54 @@ CREATE INDEX IF NOT EXISTS idx_reward_configs_schedule ON tournament_reward_conf
         };
     } catch (e) {
         return { error: e.message };
+    }
+});
+
+// Get Current Tournament Top Scores (Live leaderboard for game page)
+fastify.get('/api/tournament-top-scores', async (req, reply) => {
+    try {
+        if (!currentTournamentKey) {
+            return { scores: [], tournament: null };
+        }
+
+        const count = Math.min(parseInt(req.query.count) || 10, 50);
+        const topScores = await redis.zrange(currentTournamentKey, 0, count - 1, 'WITHSCORES');
+        const players = [];
+
+        if (Array.isArray(topScores)) {
+            const entries = [];
+            if (topScores.length > 0 && typeof topScores[0] === 'object') {
+                topScores.forEach(x => entries.push({ u: x.member, s: parseFloat(x.score) }));
+            } else {
+                for (let i = 0; i < topScores.length; i += 2) {
+                    entries.push({ u: topScores[i], s: parseFloat(topScores[i + 1]) });
+                }
+            }
+
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i];
+                let name = entry.u.substring(0, 8);
+                try {
+                    const meta = await redis.hgetall(`user_meta:${entry.u}`);
+                    if (meta && meta.username) name = meta.username;
+                } catch (e) { /* ignore */ }
+                if (name === entry.u.substring(0, 8)) {
+                    const activeUser = Array.from(activeUsers.values()).find(u => u.userId === entry.u);
+                    if (activeUser) name = activeUser.username;
+                }
+                players.push({
+                    rank: i + 1,
+                    name: name.length > 14 ? name.substring(0, 12) + '...' : name,
+                    score: entry.s,
+                    isYou: entry.u === req.query.userId
+                });
+            }
+        }
+
+        return { scores: players, tournament: currentTournamentKey };
+    } catch (e) {
+        console.error("❌ Error fetching top scores:", e);
+        return { scores: [], tournament: null };
     }
 });
 

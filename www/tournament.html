@@ -344,13 +344,10 @@
 
     <div class="container">
 
-        <div class="header-right">
+        <div class="header-right" style="display:none;">
             <div class="coin-balance">
                 <span id="coin-balance">...</span> 🪙
             </div>
-            <button onclick="showMyWins()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;"
-                title="My Wins">🏆</button>
-            <button onclick="window.location.href='index.html'" class="close-btn">&times;</button>
         </div>
         <div class="swiper mySwiper">
             <div class="swiper-wrapper">
@@ -699,87 +696,91 @@
                 display.innerText = `Ends in: ${timeStr}`;
                 if (nextTourDisplay) nextTourDisplay.innerText = timeStr;
 
-                // Show Prize Pool as HERO section if available
+                // Show Prize Pool as HERO section on TOP, Timer on BOTTOM
                 if (window.activeRewards && window.activeRewards.length > 0) {
                     const maxWinRank = Math.max(...window.activeRewards.map(r => parseInt(r.max) || 0));
                     const medals = ['🥇','🥈','🥉'];
                     display.innerHTML = `
-                        <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:10px; padding:0;">
-                            <!-- TIMER - Always visible at top -->
-                            <div style="
-                                display:flex; align-items:center; justify-content:center; gap:8px;
-                                background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.25);
-                                border-radius:10px; padding:8px 16px; width:100%;
-                            ">
-                                <span style="font-size:0.75rem; color:#a78bfa; font-weight:600; text-transform:uppercase; letter-spacing:1px;">⏱ Ends in</span>
-                                <span style="font-size:1.4rem; color:#fff; font-family:'Teko',sans-serif; font-weight:700; letter-spacing:2px;">${timeStr}</span>
-                            </div>
-                            <!-- TOP X PLAYERS WIN BANNER -->
-                            <div style="
-                                background:linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05));
-                                border:1.5px solid rgba(255,215,0,0.25);
-                                border-radius:12px; padding:8px 16px;
-                                text-align:center; width:100%;
-                                position:relative; overflow:hidden;
-                            ">
-                                <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.06),transparent);animation:shineSlide 3s infinite;"></div>
-                                <div style="font-size:1.3rem; font-family:'Teko',sans-serif; color:#FFD700; font-weight:700; letter-spacing:2px; line-height:1;">
-                                    TOP ${maxWinRank} PLAYER${maxWinRank > 1 ? 'S' : ''} WIN!
-                                </div>
-                                <div style="font-size:0.6rem; color:#a78bfa; margin-top:2px; letter-spacing:1px;">PRIZE POOL</div>
-                            </div>
-                            ${window.activeRewards.map((r, i) => {
-                        const gradients = [
-                            'linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.06))',
-                            'linear-gradient(135deg,rgba(192,192,192,0.09),rgba(138,155,174,0.04))',
-                            'linear-gradient(135deg,rgba(205,127,50,0.09),rgba(160,82,45,0.04))'
-                        ];
-                        const borderColors = ['rgba(255,215,0,0.3)','rgba(192,192,192,0.22)','rgba(205,127,50,0.22)'];
-                        const rankGradients = ['linear-gradient(135deg,#FFD700,#F59E0B)','linear-gradient(135deg,#C0C0C0,#8a9bae)','linear-gradient(135deg,#cd7f32,#a0522d)'];
-                        const bg = gradients[i] || 'linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.04))';
-                        const border = borderColors[i] || 'rgba(139,92,246,0.18)';
-                        const rankBg = rankGradients[i] || 'linear-gradient(135deg,#6366f1,#8b5cf6)';
-                        const medal = medals[i] || '🏅';
-                        return `
+                        <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:8px; padding:0; height:100%; justify-content:space-between;">
+                            <!-- PRIZE POOL SECTION (TOP) -->
+                            <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:8px;">
+                                <!-- TOP X PLAYERS WIN BANNER -->
                                 <div style="
-                                    background:${bg};
-                                    padding:10px 12px;
-                                    border-radius:14px;
-                                    display:flex;
-                                    align-items:center;
-                                    gap:10px;
-                                    border:1.5px solid ${border};
-                                    width:100%;
+                                    background:linear-gradient(135deg,rgba(255,215,0,0.13),rgba(255,165,0,0.06));
+                                    border:1.5px solid rgba(255,215,0,0.3);
+                                    border-radius:12px; padding:10px 16px;
+                                    text-align:center; width:100%;
+                                    position:relative; overflow:hidden;
                                 ">
-                                    <div style="
-                                        width:50px; height:50px;
-                                        border-radius:12px;
-                                        overflow:hidden;
-                                        flex-shrink:0;
-                                        border:2px solid ${border};
-                                    ">${r.img && r.img.startsWith('http') ? `<img src="${r.img}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-size:1.6rem;">${medal}</div>`}</div>
-                                    <div style="flex:1; min-width:0;">
-                                        <div style="font-size:1rem; color:#fff; font-weight:700; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</div>
-                                        <div style="display:inline-flex; align-items:center; background:${rankBg}; padding:2px 8px; border-radius:12px;">
-                                            <span style="font-size:0.72rem; font-weight:700; color:#fff;">Rank #${r.min}${parseInt(r.min) !== parseInt(r.max) ? ' - #' + r.max : ''}</span>
-                                        </div>
+                                    <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.06),transparent);animation:shineSlide 3s infinite;"></div>
+                                    <div style="font-size:1.4rem; font-family:'Teko',sans-serif; color:#FFD700; font-weight:700; letter-spacing:2px; line-height:1;">
+                                        🏆 TOP ${maxWinRank} PLAYER${maxWinRank > 1 ? 'S' : ''} WIN!
                                     </div>
-                                    <div style="font-size:1.3rem; flex-shrink:0;">${medal}</div>
-                                </div>`;
-                    }).join('')}
+                                    <div style="font-size:0.6rem; color:#a78bfa; margin-top:3px; letter-spacing:1.5px; font-weight:600;">PRIZE POOL</div>
+                                </div>
+                                ${window.activeRewards.map((r, i) => {
+                            const gradients = [
+                                'linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.06))',
+                                'linear-gradient(135deg,rgba(192,192,192,0.09),rgba(138,155,174,0.04))',
+                                'linear-gradient(135deg,rgba(205,127,50,0.09),rgba(160,82,45,0.04))'
+                            ];
+                            const borderColors = ['rgba(255,215,0,0.3)','rgba(192,192,192,0.22)','rgba(205,127,50,0.22)'];
+                            const rankGradients = ['linear-gradient(135deg,#FFD700,#F59E0B)','linear-gradient(135deg,#C0C0C0,#8a9bae)','linear-gradient(135deg,#cd7f32,#a0522d)'];
+                            const bg = gradients[i] || 'linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.04))';
+                            const border = borderColors[i] || 'rgba(139,92,246,0.18)';
+                            const rankBg = rankGradients[i] || 'linear-gradient(135deg,#6366f1,#8b5cf6)';
+                            const medal = medals[i] || '🏅';
+                            const rankLabel = parseInt(r.min) !== parseInt(r.max) ? 'RANK #' + r.min + ' - #' + r.max : 'RANK #' + r.min;
+                            return `
+                                    <div style="
+                                        background:${bg};
+                                        padding:10px 12px;
+                                        border-radius:14px;
+                                        display:flex;
+                                        align-items:center;
+                                        gap:10px;
+                                        border:1.5px solid ${border};
+                                        width:100%;
+                                    ">
+                                        <div style="
+                                            width:50px; height:50px;
+                                            border-radius:12px;
+                                            overflow:hidden;
+                                            flex-shrink:0;
+                                            border:2px solid ${border};
+                                        ">${r.img && r.img.startsWith('http') ? `<img src="${r.img}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-size:1.6rem;">${medal}</div>`}</div>
+                                        <div style="flex:1; min-width:0;">
+                                            <div style="font-size:1.05rem; color:#fff; font-weight:700; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family:'Teko',sans-serif; letter-spacing:0.5px;">${r.name}</div>
+                                            <div style="display:inline-flex; align-items:center; background:${rankBg}; padding:3px 10px; border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+                                                <span style="font-size:0.78rem; font-weight:800; color:#fff; font-family:'Teko',sans-serif; letter-spacing:1.5px; text-shadow:0 1px 3px rgba(0,0,0,0.4);">${rankLabel}</span>
+                                            </div>
+                                        </div>
+                                        <div style="font-size:1.3rem; flex-shrink:0;">${medal}</div>
+                                    </div>`;
+                        }).join('')}
+                            </div>
+                            <!-- COUNTDOWN TIMER (BOTTOM) -->
+                            <div style="
+                                display:flex; align-items:center; justify-content:center; gap:10px;
+                                background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.3);
+                                border-radius:12px; padding:10px 20px; width:100%;
+                                margin-top:auto;
+                            ">
+                                <span style="font-size:0.8rem; color:#a78bfa; font-weight:600; text-transform:uppercase; letter-spacing:1.5px;">⏱ ENDS IN</span>
+                                <span style="font-size:1.8rem; color:#fff; font-family:'Teko',sans-serif; font-weight:700; letter-spacing:3px; text-shadow:0 0 10px rgba(124,58,237,0.4);">${timeStr}</span>
+                            </div>
                         </div>
                     `;
                 }
 
-                // Always update Enter Arena button with timer
+                // Update Enter Arena button (no timer text - timer is shown above)
                 const actionArea = document.getElementById('action-area');
                 if (actionArea && TrysManager._showEnterButton) {
                     actionArea.innerHTML = `
                         <button onclick="enterTournament()" class="relative group w-full py-4 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-[Teko] text-2xl tracking-widest uppercase shadow-[0_0_20px_rgba(124,58,237,0.5)] border border-violet-400/30 overflow-hidden transition-all active:scale-95 hover:shadow-[0_0_40px_rgba(124,58,237,0.8)] z-50 pointer-events-auto cursor-pointer">
                             <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
                             <span class="relative z-10 flex items-center justify-center gap-3">
-                                ENTER ARENA
-                                <span style="font-size: 0.85rem; opacity: 0.8; font-weight:400; letter-spacing: 1px;">⏱ ${timeStr}</span>
+                                ⚔️ ENTER ARENA
                             </span>
                         </button>
                     `;
@@ -1082,24 +1083,45 @@
                         ${userRankHtml}
                     </div>
 
-                    <!-- FOOTER: COUNTDOWN -->
+                    <!-- FOOTER: MY WINS + COUNTDOWN -->
                     <div style="
                         flex-shrink: 0; 
-                        padding-top: 15px; 
+                        padding-top: 12px; 
                         border-top: 1px solid rgba(255,255,255,0.1);
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
+                        gap: 10px;
                     ">
-                        <div style="font-size: 0.9rem; color: #94a3b8;">Next Round:</div>
-                        <div style="
-                            font-family: 'Teko', sans-serif; 
-                            font-size: 2rem; 
-                            color: #fff; 
-                            font-weight: 600;
+                        <button onclick="showMyWins()" style="
+                            background: linear-gradient(135deg, #22c55e, #16a34a);
+                            border: none;
+                            color: #fff;
+                            padding: 8px 16px;
+                            border-radius: 12px;
+                            font-size: 0.85rem;
+                            font-weight: 700;
+                            font-family: 'Teko', sans-serif;
                             letter-spacing: 1px;
-                        ">
-                            ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            box-shadow: 0 3px 10px rgba(34,197,94,0.3);
+                            pointer-events: auto;
+                            flex-shrink: 0;
+                        ">🏅 MY WINS</button>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <div style="font-size: 0.8rem; color: #94a3b8;">Next:</div>
+                            <div style="
+                                font-family: 'Teko', sans-serif; 
+                                font-size: 2rem; 
+                                color: #fff; 
+                                font-weight: 600;
+                                letter-spacing: 1px;
+                            ">
+                                ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1899,9 +1921,9 @@
                             box-shadow:0 0 15px rgba(0,0,0,0.2);
                         ">${r.img && r.img.startsWith('http') ? `<img src="${r.img}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-size:1.8rem;">${medal}</div>`}</div>
                         <div style="flex:1; min-width:0;">
-                            <div style="font-size:1.05rem; color:#fff; font-weight:700; margin-bottom:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</div>
-                            <div style="display:inline-flex; align-items:center; gap:5px; background:${rankBg}; padding:3px 10px; border-radius:20px;">
-                                <span style="font-size:0.78rem; font-weight:700; color:#fff;">Rank #${r.min}${parseInt(r.min) !== parseInt(r.max) ? ' - #' + r.max : ''}</span>
+                            <div style="font-size:1.1rem; color:#fff; font-weight:700; margin-bottom:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family:'Teko',sans-serif; letter-spacing:0.5px;">${r.name}</div>
+                            <div style="display:inline-flex; align-items:center; gap:5px; background:${rankBg}; padding:3px 12px; border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+                                <span style="font-size:0.82rem; font-weight:800; color:#fff; font-family:'Teko',sans-serif; letter-spacing:1.5px; text-shadow:0 1px 3px rgba(0,0,0,0.4);">RANK #${r.min}${parseInt(r.min) !== parseInt(r.max) ? ' - #' + r.max : ''}</span>
                             </div>
                         </div>
                         <div style="font-size:1.5rem; flex-shrink:0;">${medal}</div>
