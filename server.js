@@ -752,7 +752,8 @@ fastify.get('/api/tournament-data', async (req, reply) => {
                     leaderboardTime: daily.leaderboardTime * 60 * 1000,
                     duration: (daily.playTime + daily.leaderboardTime) * 60 * 1000,
                     type: 'daily',
-                    time: daily.time
+                    time: daily.time,
+                    rewards: daily.rewards || []
                 };
             });
 
