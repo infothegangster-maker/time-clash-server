@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Clash - Admin Panel</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            background: linear-gradient(135deg, #FFD700, #f59e0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .refresh-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .refresh-btn:active {
+            transform: scale(0.95);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #FFD700;
+        }
+
+        .section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.1);
+            font-weight: 600;
+            color: #FFD700;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .badge-info {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            margin: 10px 0;
+        }
+
+        .timestamp {
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #475569;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background-color: #3b82f6;
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(26px);
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            margin-bottom: 15px;
+        }
+
+        .search-box::placeholder {
+            color: #64748b;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚡ Time Clash Admin Panel</h1>
+            <div>
+                <button class="refresh-btn" onclick="loadAllData()">🔄 Refresh All</button>
+            </div>
+        </div>
+
+        <div class="auto-refresh">
+            <label class="toggle-switch">
+                <input type="checkbox" id="autoRefresh" checked>
+                <span class="slider"></span>
+            </label>
+            <span>Auto Refresh (5s)</span>
+        </div>
+
+        <!-- STATS CARDS -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Active Users</div>
+                <div class="stat-value" id="stat-active-users">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active Sessions</div>
+                <div class="stat-value" id="stat-sessions">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Running Games</div>
+                <div class="stat-value" id="stat-games">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Current Tournament</div>
+                <div class="stat-value" id="stat-tournament-id" style="font-size: 1.2rem;">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Tournament Participants</div>
+                <div class="stat-value" id="stat-participants">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Server Uptime</div>
+                <div class="stat-value" id="stat-uptime" style="font-size: 1.2rem;">-</div>
+            </div>
+        </div>
+
+        <!-- ACTIVE USERS -->
+        <div class="section">
+            <div class="section-title">👥 Active Users (Firebase - Real-time)</div>
+            <input type="text" class="search-box" id="search-users"
+                placeholder="Search users by email, username, or ID..." onkeyup="filterUsers()">
+            <div class="table-container">
+                <table id="active-users-table">
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Email</th>
+                            <th>Username</th>
+                            <th>Connected At</th>
+                            <th>Last Activity</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="active-users-body">
+                        <tr>
+                            <td colspan="6" class="loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TOURNAMENT CONTROLS -->
+        <div class="section">
+            <div class="section-title">🎮 Tournament Controls</div>
+
+            <!-- Auto Tournament Toggle -->
+            <div
+                style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoTournamentToggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span style="font-weight: 600; font-size: 1.1rem;">Auto Tournaments</span>
+                        <span id="autoTournamentStatus"
+                            style="color: #10b981; font-size: 0.9rem; font-weight: 600;">(Enabled)</span>
+                    </div>
+                    <button onclick="toggleAutoTournament()"
+                        style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                        Update Status
+                    </button>
+                </div>
+            </div>
+
+            <!-- Create Tournament Now -->
+            <div
+                style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 15px; color: #FFD700;">➕ Create
+                    Tournament Now</div>
+                <div
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div>
+                        <label
+                            style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Total
+                            Duration (minutes)</label>
+                        <input type="number" id="manualDuration" value="15" min="5" max="60" step="1"
+                            style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                            onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                            onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                    </div>
+                    <div>
+                        <label
+                            style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Play
+                            Time (minutes)</label>
+                        <input type="number" id="manualPlayTime" value="12" min="3" max="55" step="1"
+                            style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                            onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                            onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                    </div>
+                    <div>
+                        <label
+                            style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Leaderboard
+                            Time (minutes)</label>
+                        <input type="number" id="manualLeaderboardTime" value="3" min="1" max="10" step="1"
+                            style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                            onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                            onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                    </div>
+                </div>
+                <button onclick="createManualTournament()"
+                    style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 1rem; transition: all 0.2s; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);"
+                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(16, 185, 129, 0.4)'"
+                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 6px rgba(16, 185, 129, 0.3)'">
+                    ➕ Create Tournament Now
+                </button>
+            </div>
+
+            <!-- Schedule Tournament -->
+            <div
+                style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 15px; color: #FFD700;">📅 Schedule
+                    Tournament</div>
+                <div
+                    style="background: rgba(255, 255, 255, 0.03); padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid rgba(255, 255, 255, 0.1);">
+                    <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 10px;">ℹ️ Current tournament settings
+                        will be used automatically</div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                        <div>
+                            <label
+                                style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Date</label>
+                            <input type="date" id="scheduleDate"
+                                style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                                onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                                onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                        </div>
+                        <div>
+                            <label
+                                style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Time</label>
+                            <input type="time" id="scheduleTime"
+                                style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                                onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                                onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                        </div>
+                    </div>
+                </div>
+                <button onclick="scheduleTournament()"
+                    style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 1rem; transition: all 0.2s; box-shadow: 0 4px 6px rgba(245, 158, 11, 0.3);"
+                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(245, 158, 11, 0.4)'"
+                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 6px rgba(245, 158, 11, 0.3)'">
+                    📅 Schedule Tournament
+                </button>
+            </div>
+
+            <!-- Scheduled Tournaments List -->
+            <div
+                style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 15px; color: #FFD700;">📅 Scheduled
+                    Tournaments</div>
+                <div id="scheduled-list" class="loading">Loading...</div>
+            </div>
+
+            <!-- Daily Tournament Schedule -->
+            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px;">
+                <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 15px; color: #FFD700;">📆 Daily
+                    Tournament Schedule</div>
+                <div
+                    style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    ℹ️ Set multiple tournaments per day at specific times. These will repeat daily automatically.
+                </div>
+
+                <!-- Add New Daily Schedule -->
+                <div
+                    style="background: rgba(255, 255, 255, 0.03); padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(255, 255, 255, 0.1);">
+                    <div style="font-weight: 600; font-size: 1rem; margin-bottom: 15px; color: #3b82f6;">➕ Add New Daily
+                        Schedule</div>
+                    <div
+                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <label
+                                style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Time
+                                (HH:MM)</label>
+                            <input type="time" id="dailyScheduleTime"
+                                style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                                onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                                onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                        </div>
+                        <div>
+                            <label
+                                style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Play
+                                Time (min)</label>
+                            <input type="number" id="dailyPlayTime" value="12" min="3" max="55" step="1"
+                                style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                                onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                                onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                        </div>
+                        <div>
+                            <label
+                                style="display: block; margin-bottom: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Leaderboard
+                                Time (min)</label>
+                            <input type="number" id="dailyLeaderboardTime" value="3" min="1" max="10" step="1"
+                                style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; transition: all 0.2s;"
+                                onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(255,255,255,0.15)'"
+                                onblur="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.background='rgba(255,255,255,0.1)'">
+                        </div>
+                    </div>
+
+                    <!-- REWARD CONFIGURATION -->
+                    <div style="margin-bottom: 20px;">
+                        <label
+                            style="display: block; margin-bottom: 8px; color: #FFD700; font-size: 0.95rem; font-weight: 600;">🎁
+                            Reward Configuration</label>
+                        <div id="reward-list"
+                            style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px;">
+                            <!-- Dynamic Reward Items will appear here -->
+                        </div>
+                        <button onclick="addRewardRow()"
+                            style="background: rgba(255,255,255,0.1); color: #fff; border: 1px dashed rgba(255,255,255,0.3); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s;">
+                            + Add Reward Tier
+                        </button>
+                    </div>
+
+                    <button onclick="addDailySchedule()"
+                        style="background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 1rem; transition: all 0.2s; box-shadow: 0 4px 6px rgba(139, 92, 246, 0.3);"
+                        onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(139, 92, 246, 0.4)'"
+                        onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 6px rgba(139, 92, 246, 0.3)'">
+                        ➕ Add Daily Schedule
+                    </button>
+                </div>
+
+                <!-- Daily Schedules List -->
+                <div id="daily-schedules-list" class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <!-- CURRENT TOURNAMENT -->
+        <div class="section">
+            <div class="section-title">🏆 Current Tournament</div>
+            <div id="current-tournament-info" class="loading">Loading...</div>
+            <div class="table-container" id="current-tournament-table" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>User ID</th>
+                            <th>Email</th>
+                            <th>Username</th>
+                            <th>Score (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="current-tournament-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TOURNAMENT HISTORY -->
+        <div class="section">
+            <div class="section-title">📜 Tournament History</div>
+            <div class="table-container">
+                <table id="tournament-history-table">
+                    <thead>
+                        <tr>
+                            <th>Tournament ID</th>
+                            <th>Date</th>
+                            <th>Participants</th>
+                            <th>Winner</th>
+                            <th>Winner Score</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tournament-history-body">
+                        <tr>
+                            <td colspan="6" class="loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SYSTEM STATS -->
+        <div class="section">
+            <div class="section-title">⚙️ System Statistics</div>
+            <div class="grid-2">
+                <div>
+                    <h3 style="margin-bottom: 15px; color: #FFD700;">Memory Usage</h3>
+                    <div id="memory-stats" class="loading">Loading...</div>
+                </div>
+                <div>
+                    <h3 style="margin-bottom: 15px; color: #FFD700;">Server Info</h3>
+                    <div id="server-info" class="loading">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ALL USERS -->
+        <div class="section">
+            <div class="section-title">👤 All Firebase Users (All Registered Users)</div>
+            <input type="text" class="search-box" id="search-all-users" placeholder="Search all users..."
+                onkeyup="filterAllUsers()">
+            <div class="table-container">
+                <table id="all-users-table">
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Email</th>
+                            <th>Display Name</th>
+                            <th>Status</th>
+                            <th>Email Verified</th>
+                            <th>Last Sign In</th>
+                        </tr>
+                    </thead>
+                    <tbody id="all-users-body">
+                        <tr>
+                            <td colspan="6" class="loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Use Direct Backend for admin panel (all /api/admin endpoints work here)
+        const WORKER_URL = "https://timeclash.raj829266.workers.dev";
+        const BACKEND_URL = "https://time-clash-server.onrender.com";
+        const SERVER_URL = BACKEND_URL; // Use Direct Backend for Admin Panel
+
+        // Log which server is being used
+        console.log("🔗 Admin Panel Server URL:", SERVER_URL);
+        console.log("📡 Using Cloudflare Worker:", SERVER_URL === WORKER_URL);
+
+        let autoRefreshInterval = null;
+        let allUsersData = [];
+        let activeUsersData = [];
+
+        // Format timestamp
+        function formatTime(timestamp) {
+            if (!timestamp) return 'N/A';
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+
+        // Format duration
+        function formatDuration(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${hours}h ${minutes}m ${secs}s`;
+        }
+
+        // Format bytes
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // Load Active Users from Firebase
+        async function loadActiveUsers() {
+            try {
+                const url = `${SERVER_URL}/api/admin/firebase-active-users`;
+                console.log("📡 Fetching active users from:", url);
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.error) {
+                    document.getElementById('active-users-body').innerHTML =
+                        `<tr><td colspan="6" class="error">Error: ${data.error}<br><small>${data.message || ''}</small></td></tr>`;
+                    console.error('Active users error:', data);
+                    return;
+                }
+
+                activeUsersData = data.users || [];
+                document.getElementById('stat-active-users').textContent = data.count || 0;
+
+                const tbody = document.getElementById('active-users-body');
+                if (activeUsersData.length === 0) {
+                    const msg = data.message || 'No users currently active on the app';
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #94a3b8;">${msg}</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = activeUsersData.map(user => `
+                    <tr>
+                        <td>${user.uid ? user.uid.substring(0, 20) + '...' : 'N/A'}</td>
+                        <td>${user.email || 'N/A'}</td>
+                        <td>${user.displayName || 'Guest'}</td>
+                        <td class="timestamp">${user.connectedAt ? formatTime(user.connectedAt) : 'N/A'}</td>
+                        <td class="timestamp">${user.lastActivity ? formatTime(user.lastActivity) : 'N/A'}</td>
+                        <td>${user.isGuest ? '<span class="badge badge-warning">Guest</span>' : '<span class="badge badge-success">Active</span>'}</td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                document.getElementById('active-users-body').innerHTML =
+                    `<tr><td colspan="6" class="error">Failed to load: ${e.message}</td></tr>`;
+            }
+        }
+
+        // Load Current Tournament
+        async function loadCurrentTournament() {
+            try {
+                const url = `${SERVER_URL}/api/admin/current-tournament`;
+                console.log("📡 Fetching current tournament from:", url);
+                const res = await fetch(url);
+
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+
+                const data = await res.json();
+                console.log("📊 Current Tournament Data:", data);
+
+                if (data.error) {
+                    document.getElementById('current-tournament-info').innerHTML =
+                        `<div class="error">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                document.getElementById('stat-participants').textContent = data.participantCount || 0;
+                document.getElementById('stat-tournament-id').textContent = data.tournamentId || 'N/A';
+
+                const infoDiv = document.getElementById('current-tournament-info');
+                const playTimeLeft = Math.floor(data.playTimeLeft / 1000);
+                const minutes = Math.floor(playTimeLeft / 60);
+                const seconds = playTimeLeft % 60;
+
+                infoDiv.innerHTML = `
+                    <div style="margin-bottom: 15px;">
+                        <strong>Tournament ID:</strong> ${data.tournamentId}<br>
+                        <strong>Participants:</strong> ${data.participantCount}<br>
+                        <strong>Play Time Left:</strong> ${minutes}m ${seconds}s
+                    </div>
+                `;
+
+                const tbody = document.getElementById('current-tournament-body');
+                if (data.participants && data.participants.length > 0) {
+                    document.getElementById('current-tournament-table').style.display = 'block';
+                    tbody.innerHTML = data.participants.map((p, index) => `
+                        <tr>
+                            <td><strong>#${index + 1}</strong></td>
+                            <td>${p.userId.substring(0, 20)}...</td>
+                            <td>${p.email}</td>
+                            <td>${p.username}</td>
+                            <td><strong>${p.score}ms</strong></td>
+                        </tr>
+                    `).join('');
+                } else {
+                    document.getElementById('current-tournament-table').style.display = 'none';
+                    infoDiv.innerHTML += '<div style="color: #94a3b8; margin-top: 10px;">No participants yet</div>';
+                }
+            } catch (e) {
+                document.getElementById('current-tournament-info').innerHTML =
+                    `<div class="error">Failed to load: ${e.message}</div>`;
+            }
+        }
+
+        // Load Tournament History
+        async function loadTournamentHistory() {
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament-history`;
+                console.log("📡 Fetching tournament history from:", url);
+                const res = await fetch(url);
+
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+
+                const data = await res.json();
+                console.log("📜 Tournament History Data:", data);
+
+                if (data.error) {
+                    document.getElementById('tournament-history-body').innerHTML =
+                        `<tr><td colspan="6" class="error">Error: ${data.error}</td></tr>`;
+                    return;
+                }
+
+                const tbody = document.getElementById('tournament-history-body');
+                if (!data.history || data.history.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No tournament history</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.history.map(tournament => {
+                    const date = new Date(tournament.ts);
+                    const winner = tournament.winners && tournament.winners.length > 0 ? tournament.winners[0] : null;
+                    const participantCount = tournament.participantCount || (tournament.allParticipants ? tournament.allParticipants.length : 0);
+
+                    // Get winner info
+                    let winnerInfo = 'N/A';
+                    let winnerScore = 'N/A';
+                    if (winner) {
+                        winnerInfo = winner.u ? (winner.u.length > 20 ? winner.u.substring(0, 20) + '...' : winner.u) : 'N/A';
+                        winnerScore = winner.s ? winner.s + 'ms' : 'N/A';
+                    }
+
+                    return `
+                        <tr>
+                            <td><strong>${tournament.id || 'N/A'}</strong></td>
+                            <td class="timestamp">${date.toLocaleString()}</td>
+                            <td><strong>${participantCount}</strong></td>
+                            <td>${winnerInfo}</td>
+                            <td><strong style="color: #FFD700;">${winnerScore}</strong></td>
+                            <td>
+                                <button onclick="viewTournamentDetails('${tournament.id}')" 
+                                    style="background: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">
+                                    View Details
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                document.getElementById('tournament-history-body').innerHTML =
+                    `<tr><td colspan="6" class="error">Failed to load: ${e.message}</td></tr>`;
+            }
+        }
+
+        // Load System Stats
+        async function loadSystemStats() {
+            try {
+                const url = `${SERVER_URL}/api/admin/system-stats`;
+                console.log("📡 Fetching system stats from:", url);
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.error) {
+                    return;
+                }
+
+                document.getElementById('stat-sessions').textContent = data.activeSessions || 0;
+                document.getElementById('stat-games').textContent = data.runningGames || 0;
+                document.getElementById('stat-uptime').textContent = formatDuration(data.serverUptime || 0);
+
+                // Memory Stats
+                if (data.memoryUsage) {
+                    const mem = data.memoryUsage;
+                    document.getElementById('memory-stats').innerHTML = `
+                        <div style="margin-bottom: 10px;"><strong>Heap Used:</strong> ${formatBytes(mem.heapUsed)}</div>
+                        <div style="margin-bottom: 10px;"><strong>Heap Total:</strong> ${formatBytes(mem.heapTotal)}</div>
+                        <div style="margin-bottom: 10px;"><strong>RSS:</strong> ${formatBytes(mem.rss)}</div>
+                        <div><strong>External:</strong> ${formatBytes(mem.external)}</div>
+                    `;
+                }
+
+                // Server Info
+                document.getElementById('server-info').innerHTML = `
+                    <div style="margin-bottom: 10px;"><strong>Current Tournament:</strong> ${data.currentTournament || 'N/A'}</div>
+                    <div style="margin-bottom: 10px;"><strong>Total Tournaments:</strong> ${data.totalTournaments || 0}</div>
+                    <div style="margin-bottom: 10px;"><strong>Active Users:</strong> ${data.activeUsers || 0}</div>
+                    <div class="timestamp">Last Updated: ${formatTime(data.timestamp)}</div>
+                `;
+            } catch (e) {
+                console.error('Failed to load system stats:', e);
+            }
+        }
+
+        // Load All Users from Firebase
+        async function loadAllUsers() {
+            try {
+                const url = `${SERVER_URL}/api/admin/firebase-users`;
+                console.log("📡 Fetching all Firebase users from:", url);
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.error) {
+                    let errorMsg = data.error;
+                    let helpText = '';
+
+                    if (data.error === 'Not Found') {
+                        helpText = 'Worker endpoint not found. Make sure worker is deployed correctly.';
+                    } else if (data.error.includes('FIREBASE_SERVICE_ACCOUNT')) {
+                        helpText = 'Make sure FIREBASE_SERVICE_ACCOUNT is set in Cloudflare Worker Secrets (not Environment Variables).';
+                    } else if (data.details) {
+                        helpText = data.details;
+                    } else {
+                        helpText = 'Check Cloudflare Worker logs and environment variables.';
+                    }
+
+                    document.getElementById('all-users-body').innerHTML =
+                        `<tr><td colspan="6" class="error"><strong>Error:</strong> ${errorMsg}<br><small>${helpText}</small>${data.availableEndpoints ? '<br><small>Available endpoints: ' + data.availableEndpoints.join(', ') + '</small>' : ''}</td></tr>`;
+                    console.error('Firebase users error:', data);
+                    return;
+                }
+
+                allUsersData = data.users || [];
+
+                // Update stats
+                document.getElementById('stat-active-users').textContent = data.activeCount || 0;
+
+                const tbody = document.getElementById('all-users-body');
+                if (allUsersData.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No Firebase users found. Users will appear here after they login.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = allUsersData.map(user => `
+                    <tr>
+                        <td>${user.uid ? user.uid.substring(0, 20) + '...' : 'N/A'}</td>
+                        <td>${user.email || 'N/A'}</td>
+                        <td>${user.displayName || 'Guest'}</td>
+                        <td>${user.isActive ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-warning">Inactive</span>'}</td>
+                        <td>${user.emailVerified ? '<span class="badge badge-info">Verified</span>' : '<span class="badge badge-warning">Unverified</span>'}</td>
+                        <td class="timestamp">${user.lastSignInTime && user.lastSignInTime !== 'Never' ? formatTime(new Date(user.lastSignInTime).getTime()) : 'Never'}</td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                document.getElementById('all-users-body').innerHTML =
+                    `<tr><td colspan="6" class="error">Failed to load: ${e.message}</td></tr>`;
+            }
+        }
+
+        // Filter functions
+        function filterUsers() {
+            const search = document.getElementById('search-users').value.toLowerCase();
+            const rows = document.querySelectorAll('#active-users-body tr');
+            rows.forEach(row => {
+                if (row.querySelector('td.error') || row.querySelector('td.loading')) return;
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(search) ? '' : 'none';
+            });
+        }
+
+        function filterAllUsers() {
+            const search = document.getElementById('search-all-users').value.toLowerCase();
+            const rows = document.querySelectorAll('#all-users-body tr');
+            rows.forEach(row => {
+                if (row.querySelector('td.error') || row.querySelector('td.loading')) return;
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(search) ? '' : 'none';
+            });
+        }
+
+        // View Tournament Details
+        function viewTournamentDetails(tournamentId) {
+            alert(`Tournament Details for: ${tournamentId}\n\nFull details will be shown in a modal (to be implemented)`);
+        }
+
+        // Load All Data
+        // Load Tournament Status
+        async function loadTournamentStatus() {
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament-status`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    console.error("Tournament status error:", data.error);
+                    return;
+                }
+
+                // Update auto tournament toggle
+                document.getElementById('autoTournamentToggle').checked = data.autoEnabled;
+                document.getElementById('autoTournamentStatus').textContent = data.autoEnabled ? '(Enabled)' : '(Disabled)';
+                document.getElementById('autoTournamentStatus').style.color = data.autoEnabled ? '#10b981' : '#ef4444';
+
+                // Load scheduled tournaments
+                if (data.scheduled && data.scheduled.length > 0) {
+                    const scheduledHtml = data.scheduled.map(s => {
+                        const date = new Date(s.scheduledTime);
+                        return `
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>${date.toLocaleString()}</strong><br>
+                                    <small style="color: #94a3b8;">Duration: ${s.duration / 60000}min | Play: ${s.playTime / 60000}min | Leaderboard: ${s.leaderboardTime / 60000}min</small>
+                                </div>
+                                <button onclick="deleteSchedule('${s.id}')" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
+                                    Delete
+                                </button>
+                            </div>
+                        `;
+                    }).join('');
+                    document.getElementById('scheduled-list').innerHTML = scheduledHtml;
+                } else {
+                    document.getElementById('scheduled-list').innerHTML = '<div style="color: #94a3b8; padding: 10px;">No scheduled tournaments</div>';
+                }
+            } catch (e) {
+                console.error("Error loading tournament status:", e);
+                document.getElementById('scheduled-list').innerHTML = `<div style="color: #ef4444;">Error: ${e.message}</div>`;
+            }
+        }
+
+        // Toggle Auto Tournament
+        async function toggleAutoTournament() {
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament/toggle-auto`;
+                const res = await fetch(url, { method: 'POST' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                document.getElementById('autoTournamentStatus').textContent = data.autoEnabled ? '(Enabled)' : '(Disabled)';
+                document.getElementById('autoTournamentStatus').style.color = data.autoEnabled ? '#10b981' : '#ef4444';
+                alert(data.message);
+                loadTournamentStatus();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        // Create Manual Tournament
+        async function createManualTournament() {
+            try {
+                const duration = parseInt(document.getElementById('manualDuration').value) * 60 * 1000;
+                const playTime = parseInt(document.getElementById('manualPlayTime').value) * 60 * 1000;
+                const leaderboardTime = parseInt(document.getElementById('manualLeaderboardTime').value) * 60 * 1000;
+
+                if (playTime + leaderboardTime > duration) {
+                    alert('Play Time + Leaderboard Time cannot exceed Total Duration!');
+                    return;
+                }
+
+                if (!confirm(`Create tournament with:\nDuration: ${duration / 60000} minutes\nPlay Time: ${playTime / 60000} minutes\nLeaderboard Time: ${leaderboardTime / 60000} minutes`)) {
+                    return;
+                }
+
+                const url = `${SERVER_URL}/api/admin/tournament/create`;
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ duration, playTime, leaderboardTime })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                alert(`Tournament Created!\nID: ${data.tournamentId}`);
+                loadCurrentTournament();
+                loadTournamentStatus();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        // Schedule Tournament (using date/time inputs)
+        async function scheduleTournament() {
+            try {
+                // Get date and time from inputs
+                const dateInput = document.getElementById('scheduleDate').value;
+                const timeInput = document.getElementById('scheduleTime').value;
+
+                if (!dateInput || !timeInput) {
+                    alert('Please select both date and time!');
+                    return;
+                }
+
+                // Combine date and time - IMPORTANT: Use local timezone, not UTC
+                // dateInput is in format YYYY-MM-DD (local date)
+                // timeInput is in format HH:MM (local time)
+                // Create date in local timezone
+                const [year, month, day] = dateInput.split('-').map(Number);
+                const [hours, minutes] = timeInput.split(':').map(Number);
+
+                // Create date object in local timezone
+                const scheduledDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+
+                if (isNaN(scheduledDate.getTime())) {
+                    alert('Invalid date/time!');
+                    return;
+                }
+
+                const scheduledTime = scheduledDate.getTime();
+                const now = Date.now();
+
+                console.log('📅 Schedule Debug:', {
+                    dateInput,
+                    timeInput,
+                    localDate: scheduledDate.toLocaleString(),
+                    utcDate: scheduledDate.toUTCString(),
+                    timestamp: scheduledTime,
+                    now: now,
+                    diffMinutes: Math.round((scheduledTime - now) / 60000)
+                });
+
+                if (scheduledTime < now) {
+                    alert('Cannot schedule tournament in the past!');
+                    return;
+                }
+
+                // Use current tournament settings (from manual tournament inputs)
+                const duration = parseInt(document.getElementById('manualDuration').value) * 60 * 1000;
+                const playTime = parseInt(document.getElementById('manualPlayTime').value) * 60 * 1000;
+                const leaderboardTime = parseInt(document.getElementById('manualLeaderboardTime').value) * 60 * 1000;
+
+                if (playTime + leaderboardTime > duration) {
+                    alert('Play Time + Leaderboard Time cannot exceed Total Duration!');
+                    return;
+                }
+
+                if (!confirm(`Schedule tournament for:\n${scheduledDate.toLocaleString()}\n\nUsing current settings:\nDuration: ${duration / 60000} minutes\nPlay Time: ${playTime / 60000} minutes\nLeaderboard Time: ${leaderboardTime / 60000} minutes`)) {
+                    return;
+                }
+
+                const url = `${SERVER_URL}/api/admin/tournament/schedule`;
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scheduledTime, duration, playTime, leaderboardTime })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                alert(`✅ Tournament Scheduled!\nTime: ${scheduledDate.toLocaleString()}`);
+
+                // Clear inputs
+                document.getElementById('scheduleDate').value = '';
+                document.getElementById('scheduleTime').value = '';
+
+                loadTournamentStatus();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        // Delete Scheduled Tournament
+        async function deleteSchedule(scheduleId) {
+            if (!confirm('Delete this scheduled tournament?')) return;
+
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament/schedule/${scheduleId}`;
+                const res = await fetch(url, { method: 'DELETE' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                loadTournamentStatus();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        // Load Daily Schedules
+        async function loadDailySchedules() {
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament/daily-schedules`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    document.getElementById('daily-schedules-list').innerHTML = `<div style="color: #ef4444;">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                const schedules = data.schedules || [];
+                // Sort by time
+                schedules.sort((a, b) => {
+                    const timeA = a.time.split(':').map(Number);
+                    const timeB = b.time.split(':').map(Number);
+                    return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
+                });
+
+                renderDailySchedules(schedules);
+            } catch (e) {
+                document.getElementById('daily-schedules-list').innerHTML = `<div style="color: #ef4444;">Error: ${e.message}</div>`;
+            }
+        }
+
+        // Render Daily Schedules List
+        function renderDailySchedules(schedules) {
+            const list = document.getElementById('daily-schedules-list');
+
+            if (schedules.length === 0) {
+                list.innerHTML = '<div style="color: #94a3b8; font-style: italic;">No daily schedules set.</div>';
+                return;
+            }
+
+            list.innerHTML = schedules.map(s => {
+                const rewardsCount = s.rewards ? s.rewards.length : 0;
+                const rewardsBadge = rewardsCount > 0
+                    ? `<span class="badge badge-warning" style="margin-left:5px">🎁 ${rewardsCount} Rewards</span>`
+                    : '';
+
+                return `
+                <div style="background: rgba(255, 255, 255, 0.03); padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-weight: 700; color: #fff; font-size: 1.1rem;">
+                            ⏰ ${s.time}
+                            ${rewardsBadge}
+                        </div>
+                        <div style="color: #94a3b8; font-size: 0.9rem; margin-top: 5px;">
+                            Play: ${s.playTime}m | Leaderboard: ${s.leaderboardTime}m | Duration: ${(s.playTime + s.leaderboardTime)}m
+                        </div>
+                    </div>
+                    <button onclick="deleteDailySchedule('${s.id}')" 
+                        style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); padding: 8px 16px; border-radius: 6px; cursor: pointer; transition: all 0.2s;">
+                        Delete
+                    </button>
+                </div>
+            `}).join('');
+        }
+
+        // --- REWARD CONFIGURATION LOGIC ---
+        let rewardRows = [];
+
+        function addRewardRow() {
+            const id = Date.now();
+            rewardRows.push(id);
+            renderRewardRows();
+        }
+
+        function removeRewardRow(id) {
+            rewardRows = rewardRows.filter(r => r !== id);
+            renderRewardRows();
+        }
+
+        function renderRewardRows() {
+            const container = document.getElementById('reward-list');
+            if (rewardRows.length === 0) {
+                container.innerHTML = '<div style="color: #64748b; font-size: 0.85rem; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">No rewards configured.</div>';
+                return;
+            }
+
+            container.innerHTML = rewardRows.map(id => `
+                <div id="reward-${id}" style="display: grid; grid-template-columns: 80px 80px 1fr 1fr 40px; gap: 10px; align-items: center; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px;">
+                    <div>
+                        <label style="font-size: 0.7rem; color: #94a3b8;">Min Rank</label>
+                        <input type="number" class="r-min" value="1" min="1" style="width: 100%; background: rgba(255,255,255,0.1); border: none; padding: 5px; color: white; border-radius: 4px;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.7rem; color: #94a3b8;">Max Rank</label>
+                        <input type="number" class="r-max" value="1" min="1" style="width: 100%; background: rgba(255,255,255,0.1); border: none; padding: 5px; color: white; border-radius: 4px;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.7rem; color: #94a3b8;">Reward Name</label>
+                        <input type="text" class="r-name" placeholder="e.g. Gold" style="width: 100%; background: rgba(255,255,255,0.1); border: none; padding: 5px; color: white; border-radius: 4px;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.7rem; color: #94a3b8;">Image URL</label>
+                        <input type="text" class="r-img" placeholder="https://..." style="width: 100%; background: rgba(255,255,255,0.1); border: none; padding: 5px; color: white; border-radius: 4px;">
+                    </div>
+                    <button onclick="removeRewardRow(${id})" style="background: none; border: none; color: #ef4444; font-size: 1.2rem; cursor: pointer; margin-top: 15px;">×</button>
+                </div>
+            `).join('');
+        }
+
+        // Add Daily Schedule
+        async function addDailySchedule() {
+            try {
+                const time = document.getElementById('dailyScheduleTime').value;
+                const playTime = parseInt(document.getElementById('dailyPlayTime').value);
+                const leaderboardTime = parseInt(document.getElementById('dailyLeaderboardTime').value);
+
+                if (!time) {
+                    alert('Please select a time!');
+                    return;
+                }
+
+                if (playTime < 3 || playTime > 55) {
+                    alert('Play Time must be between 3 and 55 minutes!');
+                    return;
+                }
+
+                if (leaderboardTime < 1 || leaderboardTime > 10) {
+                    alert('Leaderboard Time must be between 1 and 10 minutes!');
+                    return;
+                }
+
+                // Collect Rewards
+                const rewards = [];
+                const rows = document.getElementById('reward-list').children;
+                // Check if empty placeholder
+                if (rewardRows.length > 0) {
+                    for (let i = 0; i < rows.length; i++) {
+                        const row = rows[i];
+                        const min = parseInt(row.querySelector('.r-min').value);
+                        const max = parseInt(row.querySelector('.r-max').value);
+                        const name = row.querySelector('.r-name').value;
+                        const img = row.querySelector('.r-img').value;
+
+                        if (name) {
+                            rewards.push({ min, max, name, img });
+                        }
+                    }
+                }
+
+                if (!confirm(`Add daily tournament at ${time}?\n\nPlay Time: ${playTime} min\nLeaderboard Time: ${leaderboardTime} min\nTotal: ${playTime + leaderboardTime} min\nRewards: ${rewards.length}`)) {
+                    return;
+                }
+
+                const url = `${SERVER_URL}/api/admin/tournament/daily-schedule`;
+                console.log("Sending Schedule with Rewards:", rewards);
+
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ time, playTime, leaderboardTime, rewards })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                alert(`✅ Daily Schedule Added!\nTime: ${time}\nRewards: ${rewards.length}`);
+
+                // Clear inputs
+                document.getElementById('dailyScheduleTime').value = '';
+                document.getElementById('dailyPlayTime').value = '12';
+                document.getElementById('dailyLeaderboardTime').value = '3';
+                rewardRows = [];
+                renderRewardRows();
+
+                loadDailySchedules();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        // Delete Daily Schedule
+        async function deleteDailySchedule(scheduleId) {
+            if (!confirm('Delete this daily schedule?')) return;
+
+            try {
+                const url = `${SERVER_URL}/api/admin/tournament/daily-schedule/${scheduleId}`;
+                const res = await fetch(url, { method: 'DELETE' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                loadDailySchedules();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function loadAllData() {
+            await Promise.all([
+                loadActiveUsers(),
+                loadCurrentTournament(),
+                loadTournamentHistory(),
+                loadSystemStats(),
+                loadAllUsers(),
+                loadTournamentStatus(),
+                loadDailySchedules()
+            ]);
+        }
+
+        // Auto Refresh Toggle
+        document.getElementById('autoRefresh').addEventListener('change', function (e) {
+            if (e.target.checked) {
+                autoRefreshInterval = setInterval(loadAllData, 5000);
+            } else {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            }
+        });
+
+        // Show which server is being used
+        window.addEventListener('DOMContentLoaded', function () {
+            const serverInfo = document.createElement('div');
+            serverInfo.style.cssText = 'position: fixed; top: 10px; right: 10px; background: #1e293b; color: #10b981; padding: 10px 15px; border-radius: 5px; font-size: 12px; z-index: 10000; border: 1px solid #10b981;';
+            serverInfo.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 5px;">🔗 Connected to:</div>
+                <div style="font-family: monospace; color: #60a5fa;">${SERVER_URL}</div>
+                <div style="margin-top: 5px; font-size: 10px; color: #94a3b8;">${SERVER_URL === WORKER_URL ? '✅ Cloudflare Worker' : '⚠️ Direct Backend'}</div>
+            `;
+            document.body.appendChild(serverInfo);
+        });
+
+        // Set default date/time to today and current time + 1 hour
+        function setDefaultScheduleTime() {
+            const now = new Date();
+            now.setHours(now.getHours() + 1); // 1 hour from now
+            const dateStr = now.toISOString().split('T')[0];
+            const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('scheduleDate').value = dateStr;
+            document.getElementById('scheduleTime').value = timeStr;
+        }
+
+        // Initial Load
+        loadAllData();
+        setDefaultScheduleTime();
+
+        // Start Auto Refresh if enabled
+        if (document.getElementById('autoRefresh').checked) {
+            autoRefreshInterval = setInterval(loadAllData, 5000);
+        }
+    </script>
+</body>
+
+</html>
