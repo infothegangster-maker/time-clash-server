@@ -515,7 +515,18 @@ async function createTournamentFromSchedule(schedule, scheduleType, scheduleId) 
     await redis.setex(`tournament:${newTournamentId}:duration`, expirySeconds, duration.toString());
     await redis.setex(`tournament:${newTournamentId}:playTime`, expirySeconds, playTime.toString());
     await redis.setex(`tournament:${newTournamentId}:leaderboardTime`, expirySeconds, leaderboardTime.toString());
+
     await redis.setex(`tournament:${newTournamentId}:startTime`, expirySeconds, tournamentStartTime.toString());
+
+    // 5. Store Rewards Config if present
+    if (schedule.rewards && schedule.rewards.length > 0) {
+        await redis.hset(`tournament:info:${newTournamentId}`, {
+            rewards: JSON.stringify(schedule.rewards)
+        });
+        // Set expiry for info hash as well
+        await redis.expire(`tournament:info:${newTournamentId}`, expirySeconds);
+        console.log(`🎁 [REWARDS] Saved ${schedule.rewards.length} rewards for ${newTournamentId}`);
+    }
 
     // Broadcast tournament creation
     io.emit('tournament_new', {
@@ -1877,7 +1888,26 @@ io.on('connection', (socket) => {
         let activeRewards = [];
         try {
             const rRaw = await redis.hget(`tournament:info:${currentTournamentId}`, 'rewards');
-            if (rRaw) activeRewards = JSON.parse(rRaw);
+            if (rRaw) {
+                activeRewards = JSON.parse(rRaw);
+            } else if (currentTournamentId && currentTournamentId.includes('_daily_')) {
+                // FALLBACK: Try to retrieve from daily schedule list if missing (for active tournaments created before fix)
+                const dailySchedules = await redis.lrange('tournament:daily-schedules', 0, 99);
+                for (const item of dailySchedules) {
+                    try {
+                        const s = JSON.parse(item);
+                        if (s.id && currentTournamentId.includes(s.id) && s.rewards && s.rewards.length > 0) {
+                            activeRewards = s.rewards;
+                            // Cache it to avoid repeated scanning
+                            await redis.hset(`tournament:info:${currentTournamentId}`, {
+                                rewards: JSON.stringify(activeRewards)
+                            });
+                            console.log(`🔧 [FALLBACK] Recovered rewards for ${currentTournamentId} from schedule ${s.id}`);
+                            break;
+                        }
+                    } catch (e) { }
+                }
+            }
         } catch (e) { /* ignore */ }
 
         socket.emit('grd', {

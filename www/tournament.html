@@ -541,6 +541,8 @@
                 hasActiveTournament = true;
                 // Capture rewards
                 window.activeRewards = data.rw || [];
+                // Also set currentRewards for backward compatibility if needed, but we updated the usage
+                window.currentRewards = window.activeRewards;
                 stopScheduledCountdown();
 
                 // HANDLE PHASES
@@ -548,6 +550,7 @@
                 // 'l' = Leaderboard
                 if (data.ph === 'l') {
                     // LEADERBOARD PHASE
+                    window.isInLeaderboardPhase = true;
                     // Hide Enter Button
                     TrysManager.renderActionKey(false);
                     toast.style.display = 'none';
@@ -556,6 +559,7 @@
                     window.leaderboardTimeLeft = data.ltl || 0;
                     startLeaderboardCountdown(data.ltl || 0);
                 } else {
+                    window.isInLeaderboardPhase = false;
                     // PLAYING PHASE (Default)
                     restoreLobbyUI(); // Restore UI if coming from Leaderboard
                     // Show Enter Button
@@ -836,8 +840,10 @@
 
                     // Check for Reward
                     let rewardIcon = '';
-                    if (window.currentRewards) {
-                        const reward = window.currentRewards.find(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
+                    // Use activeRewards (from grd) or upcomingRewards (from scheduled)
+                    const rewardsPool = window.activeRewards || window.upcomingRewards;
+                    if (rewardsPool) {
+                        const reward = rewardsPool.find(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
                         if (reward) {
                             rewardIcon = `<span title="${reward.name}" style="font-size: 1.2rem; margin-left: 5px;">${reward.img.startsWith('http') ? `<img src="${reward.img}" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;">` : '🎁'}</span>`;
                         }
@@ -1018,9 +1024,12 @@
             }
         }
 
-        // Start scheduled tournament countdown
+        // Start countdown for scheduled tournament
         function startScheduledCountdown(scheduled) {
-            stopScheduledCountdown();
+            // CRITICAL FIX: Don't show scheduled countdown if we are in Leaderboard Phase
+            if (window.isInLeaderboardPhase) return;
+
+            if (scheduledCountdownInterval) clearInterval(scheduledCountdownInterval);
             if (tournamentInterval) {
                 clearInterval(tournamentInterval);
                 tournamentInterval = null;
