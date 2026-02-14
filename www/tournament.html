@@ -646,15 +646,16 @@
                 const myWin = data.winners.find(w => w.u === userId);
                 if (myWin) {
                     console.log(`🎉 YOU WON! Rank #${myWin.rank}`, myWin.reward);
-                    // Delay slightly to let leaderboard phase kick in first
+                    // Delay slightly to let leaderboard phase kick in + rewards distribute to Supabase
                     setTimeout(() => {
                         showWinnerOverlay({
                             rank_achieved: myWin.rank,
                             reward_name: myWin.reward ? myWin.reward.name : null,
                             reward_image: myWin.reward ? myWin.reward.img : null,
-                            id: null // Will be set from API later
+                            id: null,
+                            tournament_id: data.tid
                         });
-                    }, 800);
+                    }, 1200);
                 }
             });
         }
@@ -704,19 +705,28 @@
                     const medals = ['🥇','🥈','🥉'];
                     display.innerHTML = `
                         <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:10px; padding:0;">
+                            <!-- TIMER - Always visible at top -->
+                            <div style="
+                                display:flex; align-items:center; justify-content:center; gap:8px;
+                                background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.25);
+                                border-radius:10px; padding:8px 16px; width:100%;
+                            ">
+                                <span style="font-size:0.75rem; color:#a78bfa; font-weight:600; text-transform:uppercase; letter-spacing:1px;">⏱ Ends in</span>
+                                <span style="font-size:1.4rem; color:#fff; font-family:'Teko',sans-serif; font-weight:700; letter-spacing:2px;">${timeStr}</span>
+                            </div>
                             <!-- TOP X PLAYERS WIN BANNER -->
                             <div style="
                                 background:linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05));
                                 border:1.5px solid rgba(255,215,0,0.25);
-                                border-radius:12px; padding:10px 16px;
+                                border-radius:12px; padding:8px 16px;
                                 text-align:center; width:100%;
                                 position:relative; overflow:hidden;
                             ">
                                 <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.06),transparent);animation:shineSlide 3s infinite;"></div>
-                                <div style="font-size:1.4rem; font-family:'Teko',sans-serif; color:#FFD700; font-weight:700; letter-spacing:2px; line-height:1;">
+                                <div style="font-size:1.3rem; font-family:'Teko',sans-serif; color:#FFD700; font-weight:700; letter-spacing:2px; line-height:1;">
                                     TOP ${maxWinRank} PLAYER${maxWinRank > 1 ? 'S' : ''} WIN!
                                 </div>
-                                <div style="font-size:0.65rem; color:#a78bfa; margin-top:2px; letter-spacing:1px;">PRIZE POOL</div>
+                                <div style="font-size:0.6rem; color:#a78bfa; margin-top:2px; letter-spacing:1px;">PRIZE POOL</div>
                             </div>
                             ${window.activeRewards.map((r, i) => {
                         const gradients = [
@@ -759,20 +769,20 @@
                     }).join('')}
                         </div>
                     `;
+                }
 
-                    // Also put timer inside Enter Arena button
-                    const actionArea = document.getElementById('action-area');
-                    if (actionArea && TrysManager._showEnterButton) {
-                        actionArea.innerHTML = `
-                            <button onclick="enterTournament()" class="relative group w-full py-4 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-[Teko] text-2xl tracking-widest uppercase shadow-[0_0_20px_rgba(124,58,237,0.5)] border border-violet-400/30 overflow-hidden transition-all active:scale-95 hover:shadow-[0_0_40px_rgba(124,58,237,0.8)] z-50 pointer-events-auto cursor-pointer">
-                                <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
-                                <span class="relative z-10 flex items-center justify-center gap-3">
-                                    ENTER ARENA
-                                    <span style="font-size: 0.85rem; opacity: 0.8; font-weight:400; letter-spacing: 1px;">⏱ ${timeStr}</span>
-                                </span>
-                            </button>
-                        `;
-                    }
+                // Always update Enter Arena button with timer
+                const actionArea = document.getElementById('action-area');
+                if (actionArea && TrysManager._showEnterButton) {
+                    actionArea.innerHTML = `
+                        <button onclick="enterTournament()" class="relative group w-full py-4 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-[Teko] text-2xl tracking-widest uppercase shadow-[0_0_20px_rgba(124,58,237,0.5)] border border-violet-400/30 overflow-hidden transition-all active:scale-95 hover:shadow-[0_0_40px_rgba(124,58,237,0.8)] z-50 pointer-events-auto cursor-pointer">
+                            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+                            <span class="relative z-10 flex items-center justify-center gap-3">
+                                ENTER ARENA
+                                <span style="font-size: 0.85rem; opacity: 0.8; font-weight:400; letter-spacing: 1px;">⏱ ${timeStr}</span>
+                            </span>
+                        </button>
+                    `;
                 }
 
                 secondsRemaining--;
@@ -2061,6 +2071,7 @@
 
         // --- WINNER OVERLAY ---
         let pendingRewardId = null;
+        let pendingTournamentId = null;
         let winnerOverlayShown = false;
 
         function showWinnerOverlay(reward) {
@@ -2068,6 +2079,7 @@
             winnerOverlayShown = true;
 
             pendingRewardId = reward.id || null;
+            pendingTournamentId = reward.tournament_id || null;
             const rank = reward.rank_achieved || 1;
             const hasReward = reward.reward_name && reward.reward_name !== null;
 
@@ -2132,22 +2144,40 @@
             const userId = localStorage.getItem('tc_user_id');
             if (!userId) return;
 
-            // Poll a few times since reward distribution may take a moment
-            for (let attempt = 0; attempt < 5; attempt++) {
-                await new Promise(resolve => setTimeout(resolve, 1500));
+            // Poll with increasing delays - rewards are distributed during p→l transition
+            const delays = [800, 1000, 1500, 2000, 2500, 3000, 4000, 5000];
+            for (let attempt = 0; attempt < delays.length; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, delays[attempt]));
                 try {
                     const res = await fetch(`${SERVER_URL}/api/user-rewards?userId=${userId}`);
                     const data = await res.json();
                     if (data.rewards && data.rewards.length > 0) {
-                        const unclaimed = data.rewards.find(r => !r.is_claimed);
+                        // Try to find unclaimed reward for THIS tournament first
+                        let unclaimed = null;
+                        if (pendingTournamentId) {
+                            unclaimed = data.rewards.find(r => !r.is_claimed && r.tournament_id === pendingTournamentId);
+                        }
+                        // Fallback: any unclaimed reward
+                        if (!unclaimed) {
+                            unclaimed = data.rewards.find(r => !r.is_claimed);
+                        }
                         if (unclaimed) {
                             pendingRewardId = unclaimed.id;
-                            console.log('✅ Found pending reward ID:', pendingRewardId);
+                            console.log(`✅ Found pending reward ID: ${pendingRewardId} (attempt ${attempt + 1})`);
+                            // Update claim button if visible
+                            const claimBtn = document.getElementById('winner-claim-btn');
+                            const claimText = document.getElementById('winner-claim-text');
+                            if (claimBtn && claimText && claimBtn.disabled === false) {
+                                claimText.textContent = 'CLAIM REWARD';
+                            }
                             return;
                         }
                     }
-                } catch (e) { /* retry */ }
+                } catch (e) {
+                    console.log(`⏳ fetchPendingRewardId attempt ${attempt + 1} failed, retrying...`);
+                }
             }
+            console.log('⚠️ Could not find pending reward after all attempts');
         }
 
         async function claimWinnerReward() {

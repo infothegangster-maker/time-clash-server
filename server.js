@@ -531,6 +531,232 @@ fastify.delete('/api/admin/tournament/daily-schedule/:scheduleId', async (req, r
 
 // --- REWARD API ENDPOINTS ---
 
+// Admin: Save reward configs for a schedule (persists to Supabase)
+fastify.post('/api/admin/reward-configs', async (req, reply) => {
+    try {
+        const { schedule_id, rewards } = req.body;
+        if (!schedule_id || !rewards || !Array.isArray(rewards)) {
+            return { error: 'schedule_id and rewards array are required' };
+        }
+
+        // Validate reward tiers
+        for (const r of rewards) {
+            if (!r.name || r.min === undefined || r.max === undefined) {
+                return { error: 'Each reward needs: name, min, max. Optional: img' };
+            }
+            if (parseInt(r.min) > parseInt(r.max)) {
+                return { error: `Invalid rank range: min(${r.min}) > max(${r.max})` };
+            }
+        }
+
+        // 1. Save to Redis (for active tournament use)
+        const schedules = await redis.lrange('tournament:daily-schedules', 0, 99);
+        let found = false;
+        const updated = schedules.map(x => {
+            try {
+                const s = JSON.parse(x);
+                if (s.id === schedule_id) {
+                    found = true;
+                    s.rewards = rewards;
+                    return JSON.stringify(s);
+                }
+                return x;
+            } catch (e) { return x; }
+        });
+
+        if (found) {
+            await redis.del('tournament:daily-schedules');
+            if (updated.length > 0) await redis.rpush('tournament:daily-schedules', ...updated);
+        }
+
+        // 2. Save to Supabase (persistent storage)
+        if (supabase) {
+            // Delete existing configs for this schedule
+            await supabase.from('tournament_reward_configs').delete().eq('schedule_id', schedule_id);
+
+            // Insert new configs
+            const inserts = rewards.map((r, idx) => ({
+                schedule_id: schedule_id,
+                name: r.name,
+                image_url: r.img || null,
+                min_rank: parseInt(r.min),
+                max_rank: parseInt(r.max),
+                sort_order: idx
+            }));
+
+            const { error } = await supabase.from('tournament_reward_configs').insert(inserts);
+            if (error) {
+                console.error("❌ Supabase reward config save error:", error);
+                // If table doesn't exist, still return success since Redis has the data
+                if (error.code === '42P01') {
+                    console.log("⚠️ tournament_reward_configs table doesn't exist in Supabase. Using Redis only.");
+                    return { success: true, message: 'Saved to Redis (Supabase table missing)', rewards };
+                }
+            } else {
+                console.log(`✅ [REWARD CONFIGS] Saved ${rewards.length} tiers to Supabase for ${schedule_id}`);
+            }
+        }
+
+        return { success: true, rewards };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Admin: Get reward configs for a schedule (from Supabase, fallback Redis)
+fastify.get('/api/admin/reward-configs/:scheduleId', async (req, reply) => {
+    try {
+        const { scheduleId } = req.params;
+
+        // Try Supabase first
+        if (supabase) {
+            const { data, error } = await supabase
+                .from('tournament_reward_configs')
+                .select('*')
+                .eq('schedule_id', scheduleId)
+                .order('sort_order', { ascending: true });
+
+            if (!error && data && data.length > 0) {
+                const rewards = data.map(r => ({
+                    name: r.name,
+                    img: r.image_url,
+                    min: r.min_rank,
+                    max: r.max_rank
+                }));
+                return { success: true, rewards, source: 'supabase' };
+            }
+        }
+
+        // Fallback: Redis daily schedule
+        const schedules = await redis.lrange('tournament:daily-schedules', 0, 99);
+        for (const item of schedules) {
+            try {
+                const s = JSON.parse(item);
+                if (s.id === scheduleId && s.rewards) {
+                    return { success: true, rewards: s.rewards, source: 'redis' };
+                }
+            } catch (e) { continue; }
+        }
+
+        return { success: true, rewards: [] };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Admin: Get ALL reward configs (from Supabase)
+fastify.get('/api/admin/reward-configs', async (req, reply) => {
+    try {
+        if (supabase) {
+            const { data, error } = await supabase
+                .from('tournament_reward_configs')
+                .select('*')
+                .order('schedule_id', { ascending: true })
+                .order('sort_order', { ascending: true });
+
+            if (!error && data) {
+                // Group by schedule_id
+                const grouped = {};
+                data.forEach(r => {
+                    if (!grouped[r.schedule_id]) grouped[r.schedule_id] = [];
+                    grouped[r.schedule_id].push({
+                        name: r.name,
+                        img: r.image_url,
+                        min: r.min_rank,
+                        max: r.max_rank
+                    });
+                });
+                return { success: true, configs: grouped };
+            }
+        }
+        return { success: true, configs: {} };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Admin: Delete reward configs for a schedule
+fastify.delete('/api/admin/reward-configs/:scheduleId', async (req, reply) => {
+    try {
+        const { scheduleId } = req.params;
+
+        // Remove from Redis
+        const schedules = await redis.lrange('tournament:daily-schedules', 0, 99);
+        const updated = schedules.map(x => {
+            try {
+                const s = JSON.parse(x);
+                if (s.id === scheduleId) { s.rewards = []; return JSON.stringify(s); }
+                return x;
+            } catch (e) { return x; }
+        });
+        await redis.del('tournament:daily-schedules');
+        if (updated.length > 0) await redis.rpush('tournament:daily-schedules', ...updated);
+
+        // Remove from Supabase
+        if (supabase) {
+            await supabase.from('tournament_reward_configs').delete().eq('schedule_id', scheduleId);
+        }
+
+        return { success: true, message: 'Reward configs deleted' };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Helper: Create Supabase tables for rewards (run once)
+fastify.post('/api/admin/setup-reward-tables', async (req, reply) => {
+    if (!supabase) return { error: 'Supabase not configured' };
+
+    try {
+        // Test if user_rewards table exists
+        const { error: testError1 } = await supabase.from('user_rewards').select('id').limit(1);
+        const { error: testError2 } = await supabase.from('tournament_reward_configs').select('id').limit(1);
+
+        const missing = [];
+        if (testError1 && testError1.code === '42P01') missing.push('user_rewards');
+        if (testError2 && testError2.code === '42P01') missing.push('tournament_reward_configs');
+
+        if (missing.length === 0) {
+            return { success: true, message: 'All reward tables exist!', tables: ['user_rewards', 'tournament_reward_configs'] };
+        }
+
+        return {
+            success: false,
+            message: `Missing tables: ${missing.join(', ')}. Create them in Supabase SQL Editor:`,
+            sql: `
+-- User Rewards (won by players)
+CREATE TABLE IF NOT EXISTS user_rewards (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    tournament_id TEXT NOT NULL,
+    reward_name TEXT NOT NULL,
+    reward_image TEXT,
+    rank_achieved INTEGER NOT NULL,
+    is_claimed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_rewards_user ON user_rewards(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_rewards_tournament ON user_rewards(tournament_id);
+
+-- Reward Configs (admin-defined, persistent)
+CREATE TABLE IF NOT EXISTS tournament_reward_configs (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    schedule_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    image_url TEXT,
+    min_rank INTEGER NOT NULL,
+    max_rank INTEGER NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_reward_configs_schedule ON tournament_reward_configs(schedule_id);
+            `
+        };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
 // Get Current Tournament Rewards (Prize Pool display)
 fastify.get('/api/tournament-rewards', async (req, reply) => {
     try {
@@ -540,7 +766,28 @@ fastify.get('/api/tournament-rewards', async (req, reply) => {
 
         // Get rewards config from Redis
         const rewardsConfigRaw = await redis.hget(`tournament:info:${currentTournamentKey}`, 'rewards');
-        const rewards = rewardsConfigRaw ? JSON.parse(rewardsConfigRaw) : [];
+        let rewards = rewardsConfigRaw ? JSON.parse(rewardsConfigRaw) : [];
+
+        // Fallback: if Redis empty, try Supabase using stored schedule_id
+        if (rewards.length === 0 && supabase) {
+            try {
+                const scheduleId = await redis.hget(`tournament:info:${currentTournamentKey}`, 'schedule_id');
+                if (scheduleId) {
+                    const { data } = await supabase
+                        .from('tournament_reward_configs')
+                        .select('*')
+                        .eq('schedule_id', scheduleId)
+                        .order('sort_order');
+
+                    if (data && data.length > 0) {
+                        rewards = data.map(r => ({ name: r.name, img: r.image_url, min: r.min_rank, max: r.max_rank }));
+                        // Cache back to Redis
+                        await redis.hset(`tournament:info:${currentTournamentKey}`, { rewards: JSON.stringify(rewards) });
+                        console.log(`🎁 [REWARDS] Loaded ${rewards.length} from Supabase for schedule ${scheduleId}`);
+                    }
+                }
+            } catch (e) { /* ignore fallback errors */ }
+        }
 
         return { rewards };
     } catch (e) {
@@ -650,15 +897,41 @@ async function createTournamentFromSchedule(schedule, scheduleType, scheduleId) 
 
     await redis.setex(`tournament:${newTournamentId}:startTime`, expirySeconds, tournamentStartTime.toString());
 
-    // 5. Store Rewards Config if present
-    if (schedule.rewards && schedule.rewards.length > 0) {
-        await redis.hset(`tournament:info:${newTournamentId}`, {
-            rewards: JSON.stringify(schedule.rewards)
-        });
-        // Set expiry for info hash as well
-        await redis.expire(`tournament:info:${newTournamentId}`, expirySeconds);
-        console.log(`🎁 [REWARDS] Saved ${schedule.rewards.length} rewards for ${newTournamentId}`);
+    // 5. Store Rewards Config if present (try Redis first, then Supabase fallback)
+    let rewardsToStore = schedule.rewards && schedule.rewards.length > 0 ? schedule.rewards : [];
+
+    // If no rewards in schedule, try loading from Supabase
+    if (rewardsToStore.length === 0 && supabase && scheduleId) {
+        try {
+            const { data: supaRewards } = await supabase
+                .from('tournament_reward_configs')
+                .select('*')
+                .eq('schedule_id', scheduleId)
+                .order('sort_order', { ascending: true });
+
+            if (supaRewards && supaRewards.length > 0) {
+                rewardsToStore = supaRewards.map(r => ({
+                    name: r.name,
+                    img: r.image_url,
+                    min: r.min_rank,
+                    max: r.max_rank
+                }));
+                console.log(`🎁 [REWARDS] Loaded ${rewardsToStore.length} reward tiers from Supabase for ${scheduleId}`);
+            }
+        } catch (e) {
+            console.error("⚠️ Error loading rewards from Supabase:", e.message);
+        }
     }
+
+    // Always store schedule_id in tournament info for Supabase reward lookup
+    const infoExpiry = expirySeconds + 300;
+    const infoData = { schedule_id: scheduleId || '' };
+    if (rewardsToStore.length > 0) {
+        infoData.rewards = JSON.stringify(rewardsToStore);
+        console.log(`🎁 [REWARDS] Saved ${rewardsToStore.length} reward tiers for ${newTournamentId} (TTL: ${infoExpiry}s)`);
+    }
+    await redis.hset(`tournament:info:${newTournamentId}`, infoData);
+    await redis.expire(`tournament:info:${newTournamentId}`, infoExpiry);
 
     // Broadcast tournament creation
     io.emit('tournament_new', {
@@ -1511,12 +1784,32 @@ function startTournamentCheck() {
 
                 // Get winners for the archive
                 try {
-                    // Get rewards config for this tournament
+                    // Get rewards config for this tournament (Redis first, Supabase fallback)
                     let rewardsConfig = [];
                     try {
                         const rRaw = await redis.hget(`tournament:info:${currentTournamentKey}`, 'rewards');
                         if (rRaw) rewardsConfig = JSON.parse(rRaw);
                     } catch (e) { /* ignore */ }
+
+                    // Supabase fallback if Redis rewards empty
+                    if (rewardsConfig.length === 0 && supabase) {
+                        try {
+                            const sId = await redis.hget(`tournament:info:${currentTournamentKey}`, 'schedule_id');
+                            if (sId) {
+                                const { data: sRewards } = await supabase
+                                    .from('tournament_reward_configs')
+                                    .select('*')
+                                    .eq('schedule_id', sId)
+                                    .order('sort_order');
+                                if (sRewards && sRewards.length > 0) {
+                                    rewardsConfig = sRewards.map(r => ({ name: r.name, img: r.image_url, min: r.min_rank, max: r.max_rank }));
+                                    // Cache back to Redis
+                                    await redis.hset(`tournament:info:${currentTournamentKey}`, { rewards: JSON.stringify(rewardsConfig) });
+                                    console.log(`🎁 [P→L] Loaded ${rewardsConfig.length} rewards from Supabase for schedule ${sId}`);
+                                }
+                            }
+                        } catch (e) { console.error('⚠️ Supabase reward fallback error:', e.message); }
+                    }
 
                     // Find max rank needed (at least top 3, or max reward rank)
                     const maxRewardRank = rewardsConfig.length > 0
@@ -1568,6 +1861,51 @@ function startTournamentCheck() {
                         ltl: ltl
                     });
                     console.log(`🏆 [BROADCAST] tournament_winners emitted: ${winnersWithRewards.length} winners, ${rewardsConfig.length} rewards`);
+
+                    // 🎁 DISTRIBUTE REWARDS TO SUPABASE NOW (Redis data is fresh during p→l)
+                    if (rewardsConfig.length > 0 && supabase) {
+                        try {
+                            const rewardInserts = [];
+                            for (let i = 0; i < allWinners.length; i++) {
+                                const rank = i + 1;
+                                const player = allWinners[i];
+                                const matchingReward = rewardsConfig.find(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
+                                if (matchingReward) {
+                                    console.log(`   🎁 Rank ${rank} (${player.n}) → ${matchingReward.name}`);
+                                    rewardInserts.push({
+                                        user_id: player.u,
+                                        tournament_id: currentTournamentKey,
+                                        reward_name: matchingReward.name,
+                                        reward_image: matchingReward.img || null,
+                                        rank_achieved: rank,
+                                        is_claimed: false
+                                    });
+                                }
+                            }
+
+                            if (rewardInserts.length > 0) {
+                                const { data: insertedData, error: rewardError } = await supabase
+                                    .from('user_rewards')
+                                    .insert(rewardInserts)
+                                    .select();
+
+                                if (rewardError) {
+                                    console.error("❌ [REWARD INSERT ERROR] user_rewards insert failed:", rewardError);
+                                    console.error("   Insert data was:", JSON.stringify(rewardInserts));
+                                } else {
+                                    console.log(`✅ [REWARDS DISTRIBUTED] ${rewardInserts.length} rewards saved to Supabase user_rewards!`);
+                                    if (insertedData) console.log(`   IDs: ${insertedData.map(r => r.id).join(', ')}`);
+                                }
+                            } else {
+                                console.log(`ℹ️ [REWARDS] No matching rewards for any winners`);
+                            }
+                        } catch (rewardErr) {
+                            console.error("❌ [REWARD DISTRIBUTION ERROR]:", rewardErr);
+                        }
+                    } else {
+                        if (rewardsConfig.length === 0) console.log(`ℹ️ [REWARDS] No reward config for this tournament`);
+                        if (!supabase) console.log(`⚠️ [REWARDS] Supabase not configured - cannot save rewards`);
+                    }
 
                     // Use top 3 for archive
                     const winners = allWinners.slice(0, 3);
@@ -1634,75 +1972,69 @@ async function endTournament(oldKey) {
             if (!w.n) w.n = w.u; // Last resort: use userId
         }
 
-        // --- DISTRIBUTE REWARDS ---
+        // --- DISTRIBUTE REWARDS (FALLBACK) ---
+        // Primary distribution happens during p→l transition. This is a safety net.
         try {
-            // Get rewards config from Redis
-            const rewardsConfigRaw = await redis.hget(`tournament:info:${oldKey}`, 'rewards');
-            const rewardsConfig = rewardsConfigRaw ? JSON.parse(rewardsConfigRaw) : [];
+            if (supabase) {
+                // Check if rewards were already distributed during p→l transition
+                const { data: existingRewards } = await supabase
+                    .from('user_rewards')
+                    .select('id')
+                    .eq('tournament_id', oldKey)
+                    .limit(1);
 
-            if (rewardsConfig && rewardsConfig.length > 0 && supabase) {
-                console.log(`🎁 [REWARDS] Processing rewards for ${oldKey}...`);
+                if (existingRewards && existingRewards.length > 0) {
+                    console.log(`ℹ️ [REWARDS] Already distributed for ${oldKey} (found ${existingRewards.length} in Supabase)`);
+                } else {
+                    // Fallback: try distributing now
+                    const rewardsConfigRaw = await redis.hget(`tournament:info:${oldKey}`, 'rewards');
+                    const rewardsConfig = rewardsConfigRaw ? JSON.parse(rewardsConfigRaw) : [];
 
-                // Find max rank needed from reward config
-                const maxRewardRank = Math.max(...rewardsConfig.map(r => parseInt(r.max) || 0));
-                console.log(`🎁 [REWARDS] Max reward rank: ${maxRewardRank}`);
-
-                // Fetch all participants up to max reward rank (not just top 3)
-                const allQualifying = await redis.zrange(oldKey, 0, maxRewardRank - 1, 'WITHSCORES');
-                const qualifiedPlayers = [];
-                if (Array.isArray(allQualifying)) {
-                    if (allQualifying.length > 0 && typeof allQualifying[0] === 'object') {
-                        allQualifying.forEach(x => qualifiedPlayers.push({ u: x.member, s: x.score }));
-                    } else {
-                        for (let i = 0; i < allQualifying.length; i += 2) {
-                            qualifiedPlayers.push({ u: allQualifying[i], s: allQualifying[i + 1] });
+                    if (rewardsConfig.length > 0) {
+                        console.log(`🎁 [REWARDS FALLBACK] Distributing rewards for ${oldKey}...`);
+                        const maxRewardRank = Math.max(...rewardsConfig.map(r => parseInt(r.max) || 0));
+                        const allQualifying = await redis.zrange(oldKey, 0, maxRewardRank - 1, 'WITHSCORES');
+                        const qualifiedPlayers = [];
+                        if (Array.isArray(allQualifying)) {
+                            if (allQualifying.length > 0 && typeof allQualifying[0] === 'object') {
+                                allQualifying.forEach(x => qualifiedPlayers.push({ u: x.member, s: x.score }));
+                            } else {
+                                for (let i = 0; i < allQualifying.length; i += 2) {
+                                    qualifiedPlayers.push({ u: allQualifying[i], s: allQualifying[i + 1] });
+                                }
+                            }
                         }
+
+                        const rewardInserts = [];
+                        for (let i = 0; i < qualifiedPlayers.length; i++) {
+                            const rank = i + 1;
+                            const matchingReward = rewardsConfig.find(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
+                            if (matchingReward) {
+                                rewardInserts.push({
+                                    user_id: qualifiedPlayers[i].u,
+                                    tournament_id: oldKey,
+                                    reward_name: matchingReward.name,
+                                    reward_image: matchingReward.img || null,
+                                    rank_achieved: rank,
+                                    is_claimed: false
+                                });
+                            }
+                        }
+
+                        if (rewardInserts.length > 0) {
+                            const { error: rewardError } = await supabase
+                                .from('user_rewards')
+                                .insert(rewardInserts);
+                            if (rewardError) console.error("❌ [REWARDS FALLBACK] Insert Error:", rewardError);
+                            else console.log(`✅ [REWARDS FALLBACK] ${rewardInserts.length} rewards distributed!`);
+                        }
+                    } else {
+                        console.log(`ℹ️ [REWARDS] No reward config found in Redis for ${oldKey}`);
                     }
-                }
-
-                // Resolve display names for qualified players
-                for (let p of qualifiedPlayers) {
-                    try {
-                        const meta = await redis.hgetall(`user_meta:${p.u}`);
-                        if (meta && meta.username) p.n = meta.username;
-                    } catch (e) { /* ignore */ }
-                    if (!p.n) {
-                        const activeUser = Array.from(activeUsers.values()).find(u => u.userId === p.u);
-                        if (activeUser) p.n = activeUser.username;
-                    }
-                    if (!p.n) p.n = p.u;
-                }
-
-                const rewardInserts = [];
-                for (let i = 0; i < qualifiedPlayers.length; i++) {
-                    const rank = i + 1;
-                    const player = qualifiedPlayers[i];
-
-                    const matchingReward = rewardsConfig.find(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
-                    if (matchingReward) {
-                        console.log(`   ✨ Rank ${rank} (${player.n}) wins: ${matchingReward.name}`);
-                        rewardInserts.push({
-                            user_id: player.u,
-                            tournament_id: oldKey,
-                            reward_name: matchingReward.name,
-                            reward_image: matchingReward.img,
-                            rank_achieved: rank,
-                            is_claimed: false
-                        });
-                    }
-                }
-
-                if (rewardInserts.length > 0) {
-                    const { error: rewardError } = await supabase
-                        .from('user_rewards')
-                        .insert(rewardInserts);
-
-                    if (rewardError) console.error("❌ Reward Insert Error:", rewardError);
-                    else console.log(`✅ [REWARDS] ${rewardInserts.length} rewards distributed!`);
                 }
             }
         } catch (e) {
-            console.error("❌ Error distributing rewards:", e);
+            console.error("❌ Error in reward distribution fallback:", e);
         }
 
         // 2. Archive to History
