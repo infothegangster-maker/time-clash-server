@@ -374,7 +374,7 @@ fastify.delete('/api/admin/tournament/schedule/:scheduleId', async (req, reply) 
 // Admin: Add Daily Tournament Schedule
 fastify.post('/api/admin/tournament/daily-schedule', async (req, reply) => {
     try {
-        const { time, playTime, leaderboardTime } = req.body;
+        const { time, playTime, leaderboardTime, rewards } = req.body;
 
         if (!time) {
             return { error: 'time is required (HH:MM format)' };
@@ -414,6 +414,7 @@ fastify.post('/api/admin/tournament/daily-schedule', async (req, reply) => {
             time: time,
             playTime: playTime || 12,
             leaderboardTime: leaderboardTime || 3,
+            rewards: rewards || [],
             duration: duration,
             createdAt: Date.now()
         };
@@ -1450,6 +1451,50 @@ async function endTournament(oldKey) {
                 }
             }
             if (!w.n) w.n = w.u; // Last resort: use userId
+        }
+
+        // --- DISTRIBUTE REWARDS ---
+        try {
+            // Get rewards config from Redis
+            const rewardsConfigRaw = await redis.hget(`tournament:info:${oldKey}`, 'rewards');
+            const rewardsConfig = rewardsConfigRaw ? JSON.parse(rewardsConfigRaw) : [];
+
+            if (rewardsConfig && rewardsConfig.length > 0) {
+                console.log(`🎁 [REWARDS] Processing rewards for ${oldKey}...`);
+                const rewardInserts = [];
+
+                // Iterate winners and check for matching rewards
+                for (let i = 0; i < winners.length; i++) {
+                    const rank = i + 1; // 1-based rank
+                    const winner = winners[i];
+
+                    // Find if this rank has a reward
+                    const matchingReward = rewardsConfig.find(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
+
+                    if (matchingReward) {
+                        console.log(`   ✨ Rank ${rank} (${winner.n}) wins: ${matchingReward.name}`);
+                        rewardInserts.push({
+                            user_id: winner.u,
+                            tournament_id: oldKey,
+                            reward_name: matchingReward.name,
+                            reward_image: matchingReward.img,
+                            rank_achieved: rank,
+                            is_claimed: false
+                        });
+                    }
+                }
+
+                if (rewardInserts.length > 0) {
+                    const { error: rewardError } = await supabase
+                        .from('user_rewards')
+                        .insert(rewardInserts);
+
+                    if (rewardError) console.error("❌ Reward Insert Error:", rewardError);
+                    else console.log(`✅ [REWARDS] ${rewardInserts.length} rewards distributed!`);
+                }
+            }
+        } catch (e) {
+            console.error("❌ Error distributing rewards:", e);
         }
 
         // 2. Archive to History

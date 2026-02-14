@@ -344,6 +344,14 @@
 
     <div class="container">
 
+        <div class="header-right">
+            <div class="coin-balance">
+                <span id="coin-balance">...</span> 🪙
+            </div>
+            <button onclick="showMyWins()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;"
+                title="My Wins">🏆</button>
+            <button onclick="window.location.href='index.html'" class="close-btn">&times;</button>
+        </div>
         <div class="swiper mySwiper">
             <div class="swiper-wrapper">
 
@@ -386,6 +394,25 @@
 
                                         <!-- Header -->
                                         <div class="flex justify-end items-start mb-2">
+                                            <!-- Prize Button -->
+                                            <button onclick="showRewards()" style="
+                                                background: rgba(255, 215, 0, 0.15); 
+                                                border: 1px solid rgba(255, 215, 0, 0.4); 
+                                                color: #FFD700; 
+                                                padding: 8px 16px; 
+                                                border-radius: 20px; 
+                                                font-size: 0.9rem; 
+                                                font-weight: 600; 
+                                                cursor: pointer; 
+                                                display: flex; 
+                                                align-items: center; 
+                                                gap: 8px;
+                                                transition: all 0.2s;
+                                                pointer-events: auto; /* Enable interaction */
+                                            " onmouseover="this.style.background='rgba(255, 215, 0, 0.25)'"
+                                                onmouseout="this.style.background='rgba(255, 215, 0, 0.15)'">
+                                                🎁 Prizes
+                                            </button>
                                         </div>
 
                                         <!-- Title -->
@@ -740,7 +767,7 @@
         }
 
         // Display tournament results in leaderboard - REDESIGNED FULL SCREEN TAKEOVER
-        function displayTournamentResults(data) {
+        async function displayTournamentResults(data) {
             const display = document.getElementById('tournament-card-content');
             if (!display) return;
 
@@ -778,6 +805,15 @@
                     let name = winner.username || winner.userId.substring(0, 8);
                     if (name.length > 12) name = name.substring(0, 10) + '...';
 
+                    // Check for Reward
+                    let rewardIcon = '';
+                    if (window.currentRewards) {
+                        const reward = window.currentRewards.find(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
+                        if (reward) {
+                            rewardIcon = `<span title="${reward.name}" style="font-size: 1.2rem; margin-left: 5px;">${reward.img.startsWith('http') ? `<img src="${reward.img}" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;">` : '🎁'}</span>`;
+                        }
+                    }
+
                     winnersHtml += `
                         <div style="
                             display: flex; 
@@ -793,7 +829,10 @@
                             
                             <!-- Name -->
                             <div style="flex: 1; padding-left: 10px;">
-                                <div style="font-weight: 600; color: #fff; font-size: 1rem;">${name}</div>
+                                <div style="font-weight: 600; color: #fff; font-size: 1rem; display: flex; align-items: center;">
+                                    ${name}
+                                    ${rewardIcon}
+                                </div>
                                 <div style="font-size: 0.75rem; color: #64748b;">Rank #${rank}</div>
                             </div>
                             
@@ -1320,6 +1359,398 @@
         // Browser fallback
         TrysManager.init();
 
+    </script>
+    <!-- REWARD MODAL -->
+    <div id="reward-modal"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
+        <div
+            style="background: linear-gradient(135deg, #1e293b, #0f172a); width: 90%; max-width: 400px; padding: 25px; border-radius: 20px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 20px 50px rgba(0,0,0,0.5); position: relative;">
+            <button onclick="closeRewards()"
+                style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer;">&times;</button>
+
+            <div style="font-size: 3rem; margin-bottom: 10px;">🎁</div>
+            <h2 style="color: #FFD700; margin: 0 0 5px 0; font-family: 'Orbitron', sans-serif;">Tournament Prizes</h2>
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">Top players win these exclusive rewards!
+            </p>
+
+            <div id="reward-list-container"
+                style="max-height: 300px; overflow-y: auto; text-align: left; display: flex; flex-direction: column; gap: 10px;">
+                <!-- Rewards will be injected here -->
+                <div style="text-align: center; color: #64748b; padding: 20px;">Loading...</div>
+            </div>
+
+            <button onclick="closeRewards()"
+                style="margin-top: 20px; background: rgba(255,255,255,0.1); color: white; border: none; padding: 12px 30px; border-radius: 10px; font-weight: 600; cursor: pointer; width: 100%;">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // ... (Existing scripts likely above, adding specific reward functions here)
+
+        async function showRewards() {
+            const modal = document.getElementById('reward-modal');
+            const container = document.getElementById('reward-list-container');
+            modal.style.display = 'flex';
+
+            try {
+                const res = await fetch(`${SERVER_URL}/api/tournament-rewards`);
+                const data = await res.json();
+
+                if (data.rewards && data.rewards.length > 0) {
+                    container.innerHTML = data.rewards.map(r => `
+                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; display: flex; align-items: center; gap: 15px; border: 1px solid rgba(255,255,255,0.1);">
+                            <div style="font-size: 1.5rem;">${r.img.startsWith('http') ? `<img src="${r.img}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">` : '🏆'}</div>
+                            <div>
+                                <div style="color: #FFD700; font-weight: 700; font-size: 1rem;">${r.name}</div>
+                                <div style="color: #94a3b8; font-size: 0.8rem;">Rank ${r.min}${r.min !== r.max ? ' - ' + r.max : ''}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = `
+                        <div style="text-align: center; color: #94a3b8; padding: 30px; background: rgba(255,255,255,0.03); border-radius: 12px;">
+                            <div style="font-size: 2rem; opacity: 0.5; margin-bottom: 10px;">🚫</div>
+                            No prizes configured for this tournament.
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                container.innerHTML = `<div style="color: #ef4444; text-align: center;">Error loading rewards</div>`;
+            }
+        }
+
+        function closeRewards() {
+            document.getElementById('reward-modal').style.display = 'none';
+        }
+    </script>
+    <!-- MY WINS MODAL -->
+    <div id="my-wins-modal"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
+        <div
+            style="background: linear-gradient(135deg, #1e293b, #0f172a); width: 90%; max-width: 400px; padding: 25px; border-radius: 20px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 20px 50px rgba(0,0,0,0.5); position: relative;">
+            <button onclick="closeMyWins()"
+                style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer;">&times;</button>
+
+            <div style="font-size: 3rem; margin-bottom: 10px;">🏆</div>
+            <h2 style="color: #FFD700; margin: 0 0 5px 0; font-family: 'Orbitron', sans-serif;">My Wins</h2>
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">Your victory history and prizes!</p>
+
+            <div id="my-wins-list"
+                style="max-height: 300px; overflow-y: auto; text-align: left; display: flex; flex-direction: column; gap: 10px;">
+                <div style="text-align: center; color: #64748b; padding: 20px;">Loading...</div>
+            </div>
+
+            <button onclick="closeMyWins()"
+                style="margin-top: 20px; background: rgba(255,255,255,0.1); color: white; border: none; padding: 12px 30px; border-radius: 10px; font-weight: 600; cursor: pointer; width: 100%;">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Fetch Rewards on Load for Leaderboard Display
+        // Cache rewards for current tournament
+        window.currentRewards = [];
+        async function fetchCurrentRewards() {
+            try {
+                const res = await fetch(`${SERVER_URL}/api/tournament-rewards`);
+                const data = await res.json();
+                if (data.rewards) window.currentRewards = data.rewards;
+            } catch (e) {
+                console.error("Failed to fetch rewards", e);
+            }
+        }
+        // Call initially
+        fetchCurrentRewards();
+        // And update periodically
+        setInterval(fetchCurrentRewards, 60000);
+
+        // My Wins Logic
+        async function showMyWins() {
+            const modal = document.getElementById('my-wins-modal');
+            const container = document.getElementById('my-wins-list');
+            modal.style.display = 'flex';
+
+            const userId = localStorage.getItem('tc_user_id');
+            if (!userId) {
+                container.innerHTML = `<div style="text-align: center; color: #ef4444;">Please login to view wins.</div>`;
+                return;
+            }
+
+            try {
+                const res = await fetch(`${SERVER_URL}/api/user-rewards?userId=${userId}`);
+                const data = await res.json();
+
+                if (data.rewards && data.rewards.length > 0) {
+                    container.innerHTML = data.rewards.map(r => `
+                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; display: flex; align-items: center; gap: 15px; border: 1px solid rgba(255,255,255,0.1);">
+                            <div style="font-size: 1.5rem;">${r.reward_image && r.reward_image.startsWith('http') ? `<img src="${r.reward_image}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">` : '🏅'}</div>
+                            <div style="flex: 1;">
+                                <div style="color: #FFD700; font-weight: 700; font-size: 1rem;">${r.reward_name}</div>
+                                <div style="color: #94a3b8; font-size: 0.8rem;">Rank #${r.rank_achieved} • ${new Date(r.created_at).toLocaleDateString()}</div>
+                            </div>
+                            ${!r.is_claimed ?
+                            `<button onclick="claimReward('${r.id}', this)" style="background: #22c55e; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.8rem;">Claim</button>`
+                            :
+                            `<div style="color: #22c55e; font-size: 0.8rem; font-weight: 600;">✅ Claimed</div>`
+                        }
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = `
+                        <div style="text-align: center; color: #94a3b8; padding: 30px; background: rgba(255,255,255,0.03); border-radius: 12px;">
+                            <div style="font-size: 2rem; opacity: 0.5; margin-bottom: 10px;">🦗</div>
+                            No wins yet. Keep playing!
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                container.innerHTML = `<div style="color: #ef4444; text-align: center;">Error loading history</div>`;
+            }
+        }
+
+        async function claimReward(rewardId, btnElement) {
+            btnElement.disabled = true;
+            btnElement.innerText = "Claiming...";
+
+            try {
+                const res = await fetch(`${SERVER_URL}/api/claim-reward`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rewardId })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    btnElement.replaceWith(document.createRange().createContextualFragment(`<div style="color: #22c55e; font-size: 0.8rem; font-weight: 600;">✅ Claimed</div>`));
+                    // Check for celebratory animation if needed
+                    alert("🎉 Reward Claimed!");
+                } else {
+                    alert("Error claiming reward: " + data.error);
+                    btnElement.disabled = false;
+                    btnElement.innerText = "Claim";
+                }
+            } catch (e) {
+                alert("Network error");
+                btnElement.disabled = false;
+                btnElement.innerText = "Claim";
+            }
+        }
+
+        function closeMyWins() {
+            document.getElementById('my-wins-modal').style.display = 'none';
+        }
+    </script>
+    <!-- WINNER OVERLAY -->
+    <div id="winner-overlay"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 20000; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+        <div style="font-size: 5rem; animation: bounce 1s infinite;">🏆</div>
+        <h1
+            style="color: #FFD700; font-family: 'Orbitron', sans-serif; font-size: 2.5rem; margin: 20px 0; text-shadow: 0 0 20px #FFD700;">
+            CONGRATULATIONS!</h1>
+        <div id="winner-message" style="color: #fff; font-size: 1.2rem; margin-bottom: 30px;">You won a reward!</div>
+
+        <div id="winner-reward-card"
+            style="background: rgba(255, 215, 0, 0.1); border: 2px solid #FFD700; padding: 20px; border-radius: 15px; margin-bottom: 30px; display: flex; align-items: center; gap: 15px;">
+            <div id="winner-reward-img" style="font-size: 3rem;">🎁</div>
+            <div style="text-align: left;">
+                <div id="winner-reward-name" style="color: #FFD700; font-weight: 700; font-size: 1.5rem;">Gold Reward
+                </div>
+                <div id="winner-reward-rank" style="color: #ccc; font-size: 0.9rem;">Rank #1</div>
+            </div>
+        </div>
+
+        <button onclick="claimWinnerReward()"
+            style="background: #22c55e; color: white; border: none; padding: 15px 40px; border-radius: 30px; font-size: 1.2rem; font-weight: 700; cursor: pointer; box-shadow: 0 0 20px rgba(34, 197, 94, 0.5); transition: transform 0.2s;">
+            CLAIM NOW
+        </button>
+        <button onclick="closeWinnerOverlay()"
+            style="background: none; border: none; color: #94a3b8; margin-top: 20px; cursor: pointer;">Close</button>
+    </div>
+
+    <style>
+        @keyframes bounce {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-20px);
+            }
+        }
+    </style>
+
+    <script>
+        // Fetch Rewards on Load for Leaderboard Display
+        // Cache rewards for current tournament
+        window.currentRewards = [];
+        async function fetchCurrentRewards() {
+            try {
+                const res = await fetch(`${SERVER_URL}/api/tournament-rewards`);
+                const data = await res.json();
+                if (data.rewards) window.currentRewards = data.rewards;
+            } catch (e) {
+                console.error("Failed to fetch rewards", e);
+            }
+        }
+        // Call initially
+        fetchCurrentRewards();
+        // And update periodically
+        setInterval(fetchCurrentRewards, 60000);
+
+        // My Wins Logic
+        async function showMyWins() {
+            const modal = document.getElementById('my-wins-modal');
+            const container = document.getElementById('my-wins-list');
+            modal.style.display = 'flex';
+
+            const userId = localStorage.getItem('tc_user_id');
+            if (!userId) {
+                container.innerHTML = `<div style="text-align: center; color: #ef4444;">Please login to view wins.</div>`;
+                return;
+            }
+
+            try {
+                const res = await fetch(`${SERVER_URL}/api/user-rewards?userId=${userId}`);
+                const data = await res.json();
+
+                if (data.rewards && data.rewards.length > 0) {
+                    container.innerHTML = data.rewards.map(r => `
+                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; display: flex; align-items: center; gap: 15px; border: 1px solid rgba(255,255,255,0.1);">
+                            <div style="font-size: 1.5rem;">${r.reward_image && r.reward_image.startsWith('http') ? `<img src="${r.reward_image}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">` : '🏅'}</div>
+                            <div style="flex: 1;">
+                                <div style="color: #FFD700; font-weight: 700; font-size: 1rem;">${r.reward_name}</div>
+                                <div style="color: #94a3b8; font-size: 0.8rem;">Rank #${r.rank_achieved} • ${new Date(r.created_at).toLocaleDateString()}</div>
+                            </div>
+                            ${!r.is_claimed ?
+                            `<button onclick="claimReward('${r.id}', this)" style="background: #22c55e; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.8rem;">Claim</button>`
+                            :
+                            `<div style="color: #22c55e; font-size: 0.8rem; font-weight: 600;">✅ Claimed</div>`
+                        }
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = `
+                        <div style="text-align: center; color: #94a3b8; padding: 30px; background: rgba(255,255,255,0.03); border-radius: 12px;">
+                            <div style="font-size: 2rem; opacity: 0.5; margin-bottom: 10px;">🦗</div>
+                            No wins yet. Keep playing!
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                container.innerHTML = `<div style="color: #ef4444; text-align: center;">Error loading history</div>`;
+            }
+        }
+
+        async function claimReward(rewardId, btnElement) {
+            btnElement.disabled = true;
+            btnElement.innerText = "Claiming...";
+
+            try {
+                const res = await fetch(`${SERVER_URL}/api/claim-reward`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rewardId })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    btnElement.replaceWith(document.createRange().createContextualFragment(`<div style="color: #22c55e; font-size: 0.8rem; font-weight: 600;">✅ Claimed</div>`));
+                    // Check for celebratory animation if needed
+                    alert("🎉 Reward Claimed!");
+                } else {
+                    alert("Error claiming reward: " + data.error);
+                    btnElement.disabled = false;
+                    btnElement.innerText = "Claim";
+                }
+            } catch (e) {
+                alert("Network error");
+                btnElement.disabled = false;
+                btnElement.innerText = "Claim";
+            }
+        }
+
+        function closeMyWins() {
+            document.getElementById('my-wins-modal').style.display = 'none';
+        }
+
+        let pendingRewardId = null;
+
+        async function checkNewRewards() {
+            const userId = localStorage.getItem('tc_user_id');
+            if (!userId) return;
+
+            try {
+                // Fetch rewards that are NOT claimed
+                const res = await fetch(`${SERVER_URL}/api/user-rewards?userId=${userId}`);
+                const data = await res.json();
+
+                if (data.rewards && data.rewards.length > 0) {
+                    // Find the first unclaimed reward
+                    const newReward = data.rewards.find(r => !r.is_claimed);
+                    if (newReward) {
+                        showWinnerOverlay(newReward);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to check rewards", e);
+            }
+        }
+
+        function showWinnerOverlay(reward) {
+            // Check if we already showed this session to avoid annoyance? 
+            // For now, show if unclaimed.
+
+            pendingRewardId = reward.id;
+            document.getElementById('winner-message').innerText = `You placed #${reward.rank_achieved} in the tournament!`;
+            document.getElementById('winner-reward-name').innerText = reward.reward_name;
+            document.getElementById('winner-reward-rank').innerText = `Rank #${reward.rank_achieved}`;
+
+            const imgContainer = document.getElementById('winner-reward-img');
+            if (reward.reward_image && reward.reward_image.startsWith('http')) {
+                imgContainer.innerHTML = `<img src="${reward.reward_image}" style="width:60px;height:60px;border-radius:50%;object-fit:cover;">`;
+            } else {
+                imgContainer.innerHTML = '🎁';
+            }
+
+            document.getElementById('winner-overlay').style.display = 'flex';
+            // Play sound if available?
+        }
+
+        async function claimWinnerReward() {
+            if (!pendingRewardId) return;
+
+            try {
+                const res = await fetch(`${SERVER_URL}/api/claim-reward`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rewardId: pendingRewardId })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    alert("🎉 Reward Claimed Successfully!");
+                    closeWinnerOverlay();
+                    // Refresh data
+                    fetchCurrentRewards();
+                } else {
+                    alert("Error: " + data.error);
+                }
+            } catch (e) {
+                alert("Network error");
+            }
+        }
+
+        function closeWinnerOverlay() {
+            document.getElementById('winner-overlay').style.display = 'none';
+        }
+
+        // Check on load and periodically
+        setTimeout(checkNewRewards, 2000); // Check shortly after load
     </script>
 </body>
 
