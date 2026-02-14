@@ -2,3 +2,20 @@ node_modules/
 .env
 serviceAccountKey.json
 SERVICE_ACCOUNT_GUIDE.md
+
+# Security-sensitive files - Admin Panel
+www/admin.html
+CLOUDFLARE_ADMIN_WORKER.js
+
+# Keystore files
+*.jks
+*.keystore
+*.p12
+*.pfx
+
+# API Keys and Secrets
+*secret*
+*key*
+*token*
+*password*
+*credential*
