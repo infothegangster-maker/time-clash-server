@@ -482,6 +482,91 @@ fastify.delete('/api/admin/tournament/daily-schedule/:scheduleId', async (req, r
     }
 });
 
+// --- REWARD API ENDPOINTS ---
+
+// Get Current Tournament Rewards (Prize Pool display)
+fastify.get('/api/tournament-rewards', async (req, reply) => {
+    try {
+        if (!currentTournamentKey) {
+            return { rewards: [] };
+        }
+
+        // Get rewards config from Redis
+        const rewardsConfigRaw = await redis.hget(`tournament:info:${currentTournamentKey}`, 'rewards');
+        const rewards = rewardsConfigRaw ? JSON.parse(rewardsConfigRaw) : [];
+
+        return { rewards };
+    } catch (e) {
+        console.error("❌ Error fetching tournament rewards:", e);
+        return { rewards: [] };
+    }
+});
+
+// Get User Rewards (My Wins)
+fastify.get('/api/user-rewards', async (req, reply) => {
+    try {
+        const userId = req.query.userId;
+        if (!userId) {
+            return { error: 'userId is required', rewards: [] };
+        }
+
+        if (!supabase) {
+            return { error: 'Database not configured', rewards: [] };
+        }
+
+        const { data, error } = await supabase
+            .from('user_rewards')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error("❌ Error fetching user rewards:", error);
+            return { error: error.message, rewards: [] };
+        }
+
+        return { rewards: data || [] };
+    } catch (e) {
+        console.error("❌ Error in user-rewards:", e);
+        return { error: e.message, rewards: [] };
+    }
+});
+
+// Claim a Reward
+fastify.post('/api/claim-reward', async (req, reply) => {
+    try {
+        const { rewardId } = req.body;
+        if (!rewardId) {
+            return { error: 'rewardId is required' };
+        }
+
+        if (!supabase) {
+            return { error: 'Database not configured' };
+        }
+
+        const { data, error } = await supabase
+            .from('user_rewards')
+            .update({ is_claimed: true })
+            .eq('id', rewardId)
+            .select();
+
+        if (error) {
+            console.error("❌ Error claiming reward:", error);
+            return { error: error.message };
+        }
+
+        if (!data || data.length === 0) {
+            return { error: 'Reward not found' };
+        }
+
+        console.log(`✅ [REWARD CLAIMED] Reward ${rewardId} claimed by user`);
+        return { success: true, reward: data[0] };
+    } catch (e) {
+        console.error("❌ Error in claim-reward:", e);
+        return { error: e.message };
+    }
+});
+
 // Helper function to create tournament from schedule
 async function createTournamentFromSchedule(schedule, scheduleType, scheduleId) {
     // End current tournament
@@ -1471,22 +1556,49 @@ async function endTournament(oldKey) {
             const rewardsConfigRaw = await redis.hget(`tournament:info:${oldKey}`, 'rewards');
             const rewardsConfig = rewardsConfigRaw ? JSON.parse(rewardsConfigRaw) : [];
 
-            if (rewardsConfig && rewardsConfig.length > 0) {
+            if (rewardsConfig && rewardsConfig.length > 0 && supabase) {
                 console.log(`🎁 [REWARDS] Processing rewards for ${oldKey}...`);
+
+                // Find max rank needed from reward config
+                const maxRewardRank = Math.max(...rewardsConfig.map(r => parseInt(r.max) || 0));
+                console.log(`🎁 [REWARDS] Max reward rank: ${maxRewardRank}`);
+
+                // Fetch all participants up to max reward rank (not just top 3)
+                const allQualifying = await redis.zrange(oldKey, 0, maxRewardRank - 1, 'WITHSCORES');
+                const qualifiedPlayers = [];
+                if (Array.isArray(allQualifying)) {
+                    if (allQualifying.length > 0 && typeof allQualifying[0] === 'object') {
+                        allQualifying.forEach(x => qualifiedPlayers.push({ u: x.member, s: x.score }));
+                    } else {
+                        for (let i = 0; i < allQualifying.length; i += 2) {
+                            qualifiedPlayers.push({ u: allQualifying[i], s: allQualifying[i + 1] });
+                        }
+                    }
+                }
+
+                // Resolve display names for qualified players
+                for (let p of qualifiedPlayers) {
+                    try {
+                        const meta = await redis.hgetall(`user_meta:${p.u}`);
+                        if (meta && meta.username) p.n = meta.username;
+                    } catch (e) { /* ignore */ }
+                    if (!p.n) {
+                        const activeUser = Array.from(activeUsers.values()).find(u => u.userId === p.u);
+                        if (activeUser) p.n = activeUser.username;
+                    }
+                    if (!p.n) p.n = p.u;
+                }
+
                 const rewardInserts = [];
+                for (let i = 0; i < qualifiedPlayers.length; i++) {
+                    const rank = i + 1;
+                    const player = qualifiedPlayers[i];
 
-                // Iterate winners and check for matching rewards
-                for (let i = 0; i < winners.length; i++) {
-                    const rank = i + 1; // 1-based rank
-                    const winner = winners[i];
-
-                    // Find if this rank has a reward
                     const matchingReward = rewardsConfig.find(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
-
                     if (matchingReward) {
-                        console.log(`   ✨ Rank ${rank} (${winner.n}) wins: ${matchingReward.name}`);
+                        console.log(`   ✨ Rank ${rank} (${player.n}) wins: ${matchingReward.name}`);
                         rewardInserts.push({
-                            user_id: winner.u,
+                            user_id: player.u,
                             tournament_id: oldKey,
                             reward_name: matchingReward.name,
                             reward_image: matchingReward.img,
