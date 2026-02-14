@@ -669,17 +669,21 @@
                     ? `${SERVER_URL}/api/tournament-results?userId=${encodeURIComponent(userId)}`
                     : `${SERVER_URL}/api/tournament-results`;
 
+                console.log('🔍 [FETCH] Tournament Results from:', url);
                 const res = await fetch(url);
                 const data = await res.json();
+                console.log('📊 [API RESPONSE]:', data);
 
-                if (data.error || !data.winners || data.winners.length === 0) {
-                    return; // Don't update if no results
+                // Display results even if winners array is empty or has error
+                // This ensures countdown and target time are shown
+                if (data.error) {
+                    console.warn('⚠️ [API ERROR]:', data.error);
                 }
 
                 window.tournamentResults = data;
                 displayTournamentResults(data);
             } catch (e) {
-                console.error("Failed to fetch tournament results:", e);
+                console.error("❌ Failed to fetch tournament results:", e);
             }
         }
 
