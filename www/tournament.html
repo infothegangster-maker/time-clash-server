@@ -314,9 +314,13 @@
         .swiper-slide {
             /* Handled by Tailwind on inner card */
             background: transparent;
-            width: 340px;
-            /* Fixed width matching design */
-            height: 520px;
+            width: 100% !important;
+            /* Full width matching Home */
+            height: 550px;
+            /* Match Home Height */
+            padding: 0 10px;
+            /* Small padding to prevent edge touching */
+            box-sizing: border-box;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -345,7 +349,7 @@
 
                 <!-- SLIDE 1: CURRENT - VIOLET THEME -->
                 <div class="swiper-slide !bg-transparent !border-0 !shadow-none">
-                    <div class="[perspective:1500px] relative w-full h-[520px]">
+                    <div class="[perspective:1500px] relative w-full h-full">
                         <!-- Grid for Tilt -->
                         <!-- Grid for Tilt (LOWER Z-INDEX for pass-through) -->
                         <div class="absolute inset-0 z-30 grid grid-cols-3 grid-rows-3 pointer-events-none">
@@ -1049,19 +1053,9 @@
         const swiper = new Swiper(".mySwiper", {
             effect: "slide",
             slidesPerView: 1,
-            spaceBetween: 0,
+            spaceBetween: 20,
             allowTouchMove: false,
-            grabCursor: true,
             centeredSlides: true,
-            slidesPerView: "auto",
-            initialSlide: 1, // Start at Center
-            coverflowEffect: {
-                rotate: 50,
-                stretch: 0,
-                depth: 100,
-                modifier: 1,
-                slideShadows: true,
-            },
         });
 
         function renderHistory(history) {
