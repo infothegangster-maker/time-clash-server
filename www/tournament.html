@@ -632,6 +632,31 @@
                     }
                 }
             });
+
+            // 🏆 WINNER ANNOUNCEMENT - Triggered instantly when play time ends
+            socket.on('tournament_winners', (data) => {
+                console.log('🏆 [WINNERS BROADCAST]', data);
+                const userId = localStorage.getItem('tc_user_id');
+                if (!userId || !data.winners) return;
+
+                // Store winners data globally for leaderboard display
+                window.broadcastedWinners = data;
+
+                // Check if current user is among the winners
+                const myWin = data.winners.find(w => w.u === userId);
+                if (myWin) {
+                    console.log(`🎉 YOU WON! Rank #${myWin.rank}`, myWin.reward);
+                    // Delay slightly to let leaderboard phase kick in first
+                    setTimeout(() => {
+                        showWinnerOverlay({
+                            rank_achieved: myWin.rank,
+                            reward_name: myWin.reward ? myWin.reward.name : null,
+                            reward_image: myWin.reward ? myWin.reward.img : null,
+                            id: null // Will be set from API later
+                        });
+                    }, 800);
+                }
+            });
         }
 
         function startRealTimer(msLeft) {
@@ -675,58 +700,61 @@
 
                 // Show Prize Pool as HERO section if available
                 if (window.activeRewards && window.activeRewards.length > 0) {
+                    const maxWinRank = Math.max(...window.activeRewards.map(r => parseInt(r.max) || 0));
+                    const medals = ['🥇','🥈','🥉'];
                     display.innerHTML = `
-                        <div style="width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 0;">
-                            <div style="font-size: 0.8rem; color: #a78bfa; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; text-align: center; margin-bottom: 4px;">🏆 PRIZE POOL</div>
+                        <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:10px; padding:0;">
+                            <!-- TOP X PLAYERS WIN BANNER -->
+                            <div style="
+                                background:linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05));
+                                border:1.5px solid rgba(255,215,0,0.25);
+                                border-radius:12px; padding:10px 16px;
+                                text-align:center; width:100%;
+                                position:relative; overflow:hidden;
+                            ">
+                                <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.06),transparent);animation:shineSlide 3s infinite;"></div>
+                                <div style="font-size:1.4rem; font-family:'Teko',sans-serif; color:#FFD700; font-weight:700; letter-spacing:2px; line-height:1;">
+                                    TOP ${maxWinRank} PLAYER${maxWinRank > 1 ? 'S' : ''} WIN!
+                                </div>
+                                <div style="font-size:0.65rem; color:#a78bfa; margin-top:2px; letter-spacing:1px;">PRIZE POOL</div>
+                            </div>
                             ${window.activeRewards.map((r, i) => {
                         const gradients = [
-                            'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,165,0,0.08))',
-                            'linear-gradient(135deg, rgba(192,192,192,0.12), rgba(138,155,174,0.06))',
-                            'linear-gradient(135deg, rgba(205,127,50,0.12), rgba(160,82,45,0.06))'
+                            'linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.06))',
+                            'linear-gradient(135deg,rgba(192,192,192,0.09),rgba(138,155,174,0.04))',
+                            'linear-gradient(135deg,rgba(205,127,50,0.09),rgba(160,82,45,0.04))'
                         ];
-                        const borderColors = ['rgba(255,215,0,0.35)', 'rgba(192,192,192,0.25)', 'rgba(205,127,50,0.25)'];
-                        const rankGradients = ['linear-gradient(135deg, #FFD700, #FFA500)', 'linear-gradient(135deg, #C0C0C0, #8a9bae)', 'linear-gradient(135deg, #cd7f32, #a0522d)'];
-                        const glowColors = ['rgba(255,215,0,0.25)', 'rgba(192,192,192,0.15)', 'rgba(205,127,50,0.15)'];
-                        const bg = gradients[i] || 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.05))';
-                        const border = borderColors[i] || 'rgba(139,92,246,0.2)';
-                        const rankBg = rankGradients[i] || 'linear-gradient(135deg, #6366f1, #8b5cf6)';
-                        const glow = glowColors[i] || 'rgba(139,92,246,0.2)';
+                        const borderColors = ['rgba(255,215,0,0.3)','rgba(192,192,192,0.22)','rgba(205,127,50,0.22)'];
+                        const rankGradients = ['linear-gradient(135deg,#FFD700,#F59E0B)','linear-gradient(135deg,#C0C0C0,#8a9bae)','linear-gradient(135deg,#cd7f32,#a0522d)'];
+                        const bg = gradients[i] || 'linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.04))';
+                        const border = borderColors[i] || 'rgba(139,92,246,0.18)';
+                        const rankBg = rankGradients[i] || 'linear-gradient(135deg,#6366f1,#8b5cf6)';
+                        const medal = medals[i] || '🏅';
                         return `
                                 <div style="
-                                    background: ${bg};
-                                    backdrop-filter: blur(12px);
-                                    -webkit-backdrop-filter: blur(12px);
-                                    padding: 14px 16px;
-                                    border-radius: 16px;
-                                    display: flex;
-                                    align-items: center;
-                                    gap: 14px;
-                                    border: 1.5px solid ${border};
-                                    box-shadow: 0 4px 20px ${glow};
-                                    width: 100%;
+                                    background:${bg};
+                                    padding:10px 12px;
+                                    border-radius:14px;
+                                    display:flex;
+                                    align-items:center;
+                                    gap:10px;
+                                    border:1.5px solid ${border};
+                                    width:100%;
                                 ">
                                     <div style="
-                                        width: 100px; height: 100px;
-                                        border-radius: 16px;
-                                        overflow: hidden;
-                                        flex-shrink: 0;
-                                        border: 2.5px solid ${border};
-                                        box-shadow: 0 0 20px ${glow};
-                                    ">${r.img && r.img.startsWith('http') ? `<img src="${r.img}" style="width:100%;height:100%;object-fit:cover;">` : '<div style="width:100%;height:100%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:2.5rem;">🎁</div>'}</div>
-                                    <div style="flex: 1; min-width: 0;">
-                                        <div style="font-size: 1.15rem; color: #fff; font-weight: 800; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${r.name}</div>
-                                        <div style="
-                                            display: inline-flex;
-                                            align-items: center;
-                                            gap: 6px;
-                                            background: ${rankBg};
-                                            padding: 4px 12px;
-                                            border-radius: 20px;
-                                            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                                        ">
-                                            <span style="font-size: 0.85rem; font-weight: 800; color: #fff;">Rank #${r.min}${r.min !== r.max ? ' – ' + r.max : ''}</span>
+                                        width:50px; height:50px;
+                                        border-radius:12px;
+                                        overflow:hidden;
+                                        flex-shrink:0;
+                                        border:2px solid ${border};
+                                    ">${r.img && r.img.startsWith('http') ? `<img src="${r.img}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-size:1.6rem;">${medal}</div>`}</div>
+                                    <div style="flex:1; min-width:0;">
+                                        <div style="font-size:1rem; color:#fff; font-weight:700; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</div>
+                                        <div style="display:inline-flex; align-items:center; background:${rankBg}; padding:2px 8px; border-radius:12px;">
+                                            <span style="font-size:0.72rem; font-weight:700; color:#fff;">Rank #${r.min}${parseInt(r.min) !== parseInt(r.max) ? ' - #' + r.max : ''}</span>
                                         </div>
                                     </div>
+                                    <div style="font-size:1.3rem; flex-shrink:0;">${medal}</div>
                                 </div>`;
                     }).join('')}
                         </div>
@@ -1160,58 +1188,60 @@
                         ${isDaily ? `<div style="font-size: 0.7rem; color: #64748b; margin-top: 3px; opacity: 0.8;">Repeats daily at ${scheduled.time}</div>` : ''}
                         
                         ${scheduled.rewards && scheduled.rewards.length > 0 ? (() => {
+                        const maxWR = Math.max(...scheduled.rewards.map(r => parseInt(r.max) || 0));
+                        const mdls = ['🥇','🥈','🥉'];
                         return `
-                        <div style="margin-top: 14px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px;">
-                            <div style="font-size: 0.8rem; color: #a78bfa; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; text-align: center;">🏆 PRIZE POOL</div>
+                        <div style="margin-top:12px; width:100%; display:flex; flex-direction:column; align-items:center; gap:8px;">
+                            <div style="
+                                background:linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05));
+                                border:1.5px solid rgba(255,215,0,0.25);
+                                border-radius:10px; padding:8px 14px;
+                                text-align:center; width:100%;
+                                position:relative; overflow:hidden;
+                            ">
+                                <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.06),transparent);animation:shineSlide 3s infinite;"></div>
+                                <div style="font-size:1.2rem; font-family:'Teko',sans-serif; color:#FFD700; font-weight:700; letter-spacing:2px; line-height:1;">
+                                    TOP ${maxWR} PLAYER${maxWR > 1 ? 'S' : ''} WIN!
+                                </div>
+                                <div style="font-size:0.6rem; color:#a78bfa; margin-top:2px; letter-spacing:1px;">PRIZE POOL</div>
+                            </div>
                             ${scheduled.rewards.map((r, i) => {
                             const gradients = [
-                                'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,165,0,0.08))',
-                                'linear-gradient(135deg, rgba(192,192,192,0.12), rgba(138,155,174,0.06))',
-                                'linear-gradient(135deg, rgba(205,127,50,0.12), rgba(160,82,45,0.06))'
+                                'linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.06))',
+                                'linear-gradient(135deg,rgba(192,192,192,0.09),rgba(138,155,174,0.04))',
+                                'linear-gradient(135deg,rgba(205,127,50,0.09),rgba(160,82,45,0.04))'
                             ];
-                            const borderColors = ['rgba(255,215,0,0.35)', 'rgba(192,192,192,0.25)', 'rgba(205,127,50,0.25)'];
-                            const rankGradients = ['linear-gradient(135deg, #FFD700, #FFA500)', 'linear-gradient(135deg, #C0C0C0, #8a9bae)', 'linear-gradient(135deg, #cd7f32, #a0522d)'];
-                            const glowColors = ['rgba(255,215,0,0.25)', 'rgba(192,192,192,0.15)', 'rgba(205,127,50,0.15)'];
-                            const bg = gradients[i] || 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.05))';
-                            const border = borderColors[i] || 'rgba(139,92,246,0.2)';
-                            const rankBg = rankGradients[i] || 'linear-gradient(135deg, #6366f1, #8b5cf6)';
-                            const glow = glowColors[i] || 'rgba(139,92,246,0.2)';
+                            const borderColors = ['rgba(255,215,0,0.3)','rgba(192,192,192,0.22)','rgba(205,127,50,0.22)'];
+                            const rankGradients = ['linear-gradient(135deg,#FFD700,#F59E0B)','linear-gradient(135deg,#C0C0C0,#8a9bae)','linear-gradient(135deg,#cd7f32,#a0522d)'];
+                            const bg = gradients[i] || 'linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.04))';
+                            const border = borderColors[i] || 'rgba(139,92,246,0.18)';
+                            const rankBg = rankGradients[i] || 'linear-gradient(135deg,#6366f1,#8b5cf6)';
+                            const medal = mdls[i] || '🏅';
                             return `
                                 <div style="
-                                    background: ${bg};
-                                    backdrop-filter: blur(12px);
-                                    -webkit-backdrop-filter: blur(12px);
-                                    padding: 14px 16px;
-                                    border-radius: 16px;
-                                    display: flex;
-                                    align-items: center;
-                                    gap: 14px;
-                                    border: 1.5px solid ${border};
-                                    box-shadow: 0 4px 20px ${glow};
-                                    width: 100%;
+                                    background:${bg};
+                                    padding:10px 12px;
+                                    border-radius:14px;
+                                    display:flex;
+                                    align-items:center;
+                                    gap:10px;
+                                    border:1.5px solid ${border};
+                                    width:100%;
                                 ">
                                     <div style="
-                                        width: 100px; height: 100px;
-                                        border-radius: 16px;
-                                        overflow: hidden;
-                                        flex-shrink: 0;
-                                        border: 2.5px solid ${border};
-                                        box-shadow: 0 0 20px ${glow};
-                                    ">${r.img && r.img.startsWith('http') ? `<img src="${r.img}" style="width:100%;height:100%;object-fit:cover;">` : '<div style="width:100%;height:100%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:2.5rem;">🎁</div>'}</div>
-                                    <div style="flex: 1; min-width: 0;">
-                                        <div style="font-size: 1.15rem; color: #fff; font-weight: 800; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${r.name}</div>
-                                        <div style="
-                                            display: inline-flex;
-                                            align-items: center;
-                                            gap: 6px;
-                                            background: ${rankBg};
-                                            padding: 4px 12px;
-                                            border-radius: 20px;
-                                            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                                        ">
-                                            <span style="font-size: 0.85rem; font-weight: 800; color: #fff;">Rank #${r.min}${r.min !== r.max ? ' – ' + r.max : ''}</span>
+                                        width:44px; height:44px;
+                                        border-radius:10px;
+                                        overflow:hidden;
+                                        flex-shrink:0;
+                                        border:2px solid ${border};
+                                    ">${r.img && r.img.startsWith('http') ? `<img src="${r.img}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-size:1.4rem;">${medal}</div>`}</div>
+                                    <div style="flex:1; min-width:0;">
+                                        <div style="font-size:0.95rem; color:#fff; font-weight:700; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</div>
+                                        <div style="display:inline-flex; align-items:center; background:${rankBg}; padding:2px 8px; border-radius:12px;">
+                                            <span style="font-size:0.7rem; font-weight:700; color:#fff;">Rank #${r.min}${parseInt(r.min) !== parseInt(r.max) ? ' - #' + r.max : ''}</span>
                                         </div>
                                     </div>
+                                    <div style="font-size:1.2rem; flex-shrink:0;">${medal}</div>
                                 </div>`;
                         }).join('')}
                         </div>`;
@@ -1525,415 +1555,356 @@
         TrysManager.init();
 
     </script>
-    <!-- REWARD MODAL -->
-    <div id="reward-modal"
-        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
-        <div
-            style="background: linear-gradient(135deg, #1e293b, #0f172a); width: 90%; max-width: 400px; padding: 25px; border-radius: 20px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 20px 50px rgba(0,0,0,0.5); position: relative;">
-            <button onclick="closeRewards()"
-                style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer;">&times;</button>
 
-            <div style="font-size: 3rem; margin-bottom: 10px;">🎁</div>
-            <h2 style="color: #FFD700; margin: 0 0 5px 0; font-family: 'Orbitron', sans-serif;">Tournament Prizes</h2>
-            <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">Top players win these exclusive rewards!
-            </p>
-
-            <div id="reward-list-container"
-                style="max-height: 300px; overflow-y: auto; text-align: left; display: flex; flex-direction: column; gap: 10px;">
-                <!-- Rewards will be injected here -->
-                <div style="text-align: center; color: #64748b; padding: 20px;">Loading...</div>
-            </div>
-
-            <button onclick="closeRewards()"
-                style="margin-top: 20px; background: rgba(255,255,255,0.1); color: white; border: none; padding: 12px 30px; border-radius: 10px; font-weight: 600; cursor: pointer; width: 100%;">
-                Close
-            </button>
-        </div>
-    </div>
-
-    <script>
-        // ... (Existing scripts likely above, adding specific reward functions here)
-
-        async function showRewards() {
-            const modal = document.getElementById('reward-modal');
-            const container = document.getElementById('reward-list-container');
-            modal.style.display = 'flex';
-
-            try {
-                const res = await fetch(`${SERVER_URL}/api/tournament-rewards`);
-                const data = await res.json();
-
-                if (data.rewards && data.rewards.length > 0) {
-                    container.innerHTML = data.rewards.map(r => `
-                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; display: flex; align-items: center; gap: 15px; border: 1px solid rgba(255,255,255,0.1);">
-                            <div style="font-size: 1.5rem;">${r.img.startsWith('http') ? `<img src="${r.img}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">` : '🏆'}</div>
-                            <div>
-                                <div style="color: #FFD700; font-weight: 700; font-size: 1rem;">${r.name}</div>
-                                <div style="color: #94a3b8; font-size: 0.8rem;">Rank ${r.min}${r.min !== r.max ? ' - ' + r.max : ''}</div>
-                            </div>
-                        </div>
-                    `).join('');
-                } else {
-                    container.innerHTML = `
-                        <div style="text-align: center; color: #94a3b8; padding: 30px; background: rgba(255,255,255,0.03); border-radius: 12px;">
-                            <div style="font-size: 2rem; opacity: 0.5; margin-bottom: 10px;">🚫</div>
-                            No prizes configured for this tournament.
-                        </div>
-                    `;
-                }
-            } catch (e) {
-                container.innerHTML = `<div style="color: #ef4444; text-align: center;">Error loading rewards</div>`;
-            }
-        }
-
-        function closeRewards() {
-            document.getElementById('reward-modal').style.display = 'none';
-        }
-    </script>
-    <!-- MY WINS MODAL -->
-    <div id="my-wins-modal"
-        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
-        <div
-            style="background: linear-gradient(135deg, #1e293b, #0f172a); width: 90%; max-width: 400px; padding: 25px; border-radius: 20px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 20px 50px rgba(0,0,0,0.5); position: relative;">
-            <button onclick="closeMyWins()"
-                style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer;">&times;</button>
-
-            <div style="font-size: 3rem; margin-bottom: 10px;">🏆</div>
-            <h2 style="color: #FFD700; margin: 0 0 5px 0; font-family: 'Orbitron', sans-serif;">My Wins</h2>
-            <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">Your victory history and prizes!</p>
-
-            <div id="my-wins-list"
-                style="max-height: 300px; overflow-y: auto; text-align: left; display: flex; flex-direction: column; gap: 10px;">
-                <div style="text-align: center; color: #64748b; padding: 20px;">Loading...</div>
-            </div>
-
-            <button onclick="closeMyWins()"
-                style="margin-top: 20px; background: rgba(255,255,255,0.1); color: white; border: none; padding: 12px 30px; border-radius: 10px; font-weight: 600; cursor: pointer; width: 100%;">
-                Close
-            </button>
-        </div>
-    </div>
-
-    <script>
-        // Fetch Rewards on Load for Leaderboard Display
-        // Cache rewards for current tournament
-        window.currentRewards = [];
-        async function fetchCurrentRewards() {
-            try {
-                const res = await fetch(`${SERVER_URL}/api/tournament-rewards`);
-                const data = await res.json();
-                if (data.rewards) window.currentRewards = data.rewards;
-            } catch (e) {
-                console.error("Failed to fetch rewards", e);
-            }
-        }
-        // Call initially
-        fetchCurrentRewards();
-        // And update periodically
-        setInterval(fetchCurrentRewards, 60000);
-
-        // My Wins Logic
-        async function showMyWins() {
-            const modal = document.getElementById('my-wins-modal');
-            const container = document.getElementById('my-wins-list');
-            modal.style.display = 'flex';
-
-            const userId = localStorage.getItem('tc_user_id');
-            if (!userId) {
-                container.innerHTML = `<div style="text-align: center; color: #ef4444;">Please login to view wins.</div>`;
-                return;
-            }
-
-            try {
-                const res = await fetch(`${SERVER_URL}/api/user-rewards?userId=${userId}`);
-                const data = await res.json();
-
-                if (data.rewards && data.rewards.length > 0) {
-                    container.innerHTML = data.rewards.map(r => `
-                        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; display: flex; align-items: center; gap: 15px; border: 1px solid rgba(255,255,255,0.1);">
-                            <div style="font-size: 1.5rem;">${r.reward_image && r.reward_image.startsWith('http') ? `<img src="${r.reward_image}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">` : '🏅'}</div>
-                            <div style="flex: 1;">
-                                <div style="color: #FFD700; font-weight: 700; font-size: 1rem;">${r.reward_name}</div>
-                                <div style="color: #94a3b8; font-size: 0.8rem;">Rank #${r.rank_achieved} • ${new Date(r.created_at).toLocaleDateString()}</div>
-                            </div>
-                            ${!r.is_claimed ?
-                            `<button onclick="claimReward('${r.id}', this)" style="background: #22c55e; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.8rem;">Claim</button>`
-                            :
-                            `<div style="color: #22c55e; font-size: 0.8rem; font-weight: 600;">✅ Claimed</div>`
-                        }
-                        </div>
-                    `).join('');
-                } else {
-                    container.innerHTML = `
-                        <div style="text-align: center; color: #94a3b8; padding: 30px; background: rgba(255,255,255,0.03); border-radius: 12px;">
-                            <div style="font-size: 2rem; opacity: 0.5; margin-bottom: 10px;">🦗</div>
-                            No wins yet. Keep playing!
-                        </div>
-                    `;
-                }
-            } catch (e) {
-                container.innerHTML = `<div style="color: #ef4444; text-align: center;">Error loading history</div>`;
-            }
-        }
-
-        async function claimReward(rewardId, btnElement) {
-            btnElement.disabled = true;
-            btnElement.innerText = "Claiming...";
-
-            try {
-                const res = await fetch(`${SERVER_URL}/api/claim-reward`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ rewardId })
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    btnElement.replaceWith(document.createRange().createContextualFragment(`<div style="color: #22c55e; font-size: 0.8rem; font-weight: 600;">✅ Claimed</div>`));
-                    // Check for celebratory animation if needed
-                    alert("🎉 Reward Claimed!");
-                } else {
-                    alert("Error claiming reward: " + data.error);
-                    btnElement.disabled = false;
-                    btnElement.innerText = "Claim";
-                }
-            } catch (e) {
-                alert("Network error");
-                btnElement.disabled = false;
-                btnElement.innerText = "Claim";
-            }
-        }
-
-        function closeMyWins() {
-            document.getElementById('my-wins-modal').style.display = 'none';
-        }
-    </script>
-    <!-- PREMIUM WINNER OVERLAY -->
-    <div id="winner-overlay"
-        style="display: none; position: fixed; inset: 0; z-index: 20000; justify-content: center; align-items: center; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);">
-        <canvas id="confetti-canvas" style="position: absolute; inset: 0; pointer-events: none;"></canvas>
-        <div class="winner-card" style="
-            background: linear-gradient(145deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
-            border: 1px solid rgba(255, 215, 0, 0.3);
-            box-shadow: 0 0 50px rgba(255, 215, 0, 0.15), inset 0 0 20px rgba(255, 215, 0, 0.05);
-            padding: 40px;
-            border-radius: 24px;
-            text-align: center;
-            max-width: 90%;
-            width: 400px;
-            position: relative;
-            transform: scale(0.9);
-            opacity: 0;
-            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-        ">
-            <div style="font-size: 5rem; margin-bottom: 10px; animation: bounce 2s infinite;">🏆</div>
-            <h1 style="
-                color: transparent;
-                background: linear-gradient(to right, #FFD700, #FDB931, #FFD700);
-                -webkit-background-clip: text;
-                font-family: 'Teko', sans-serif;
-                font-size: 4rem;
-                line-height: 1;
-                margin: 0;
-                text-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
-            ">VICTORY!</h1>
-            <div id="winner-message"
-                style="color: #cbd5e1; font-size: 1.1rem; margin-bottom: 30px; font-family: 'Inter', sans-serif;">You
-                placed Rank #1!</div>
-
-            <div id="winner-reward-card" style="
-                background: rgba(255, 255, 255, 0.03);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                padding: 15px;
-                border-radius: 16px;
-                margin-bottom: 30px;
-                display: flex;
-                align-items: center;
-                gap: 20px;
-                text-align: left;
-            ">
-                <div id="winner-reward-img" style="
-                    width: 70px; height: 70px;
-                    border-radius: 14px;
-                    background: rgba(0,0,0,0.3);
-                    display: flex; align-items: center; justify-content: center;
-                    font-size: 2.5rem;
-                    box-shadow: 0 0 15px rgba(255,215,0,0.2);
-                    flex-shrink: 0;
-                ">🎁</div>
-                <div>
-                    <div style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">
-                        Reward</div>
-                    <div id="winner-reward-name" style="color: #fff; font-weight: 700; font-size: 1.4rem;">Gold Prize
-                    </div>
-                    <div id="winner-reward-rank" style="color: #FFD700; font-size: 0.9rem; font-weight: 600;">Rank #1
-                    </div>
-                </div>
-            </div>
-
-            <button onclick="claimWinnerReward()" id="winner-claim-btn" style="
-                background: linear-gradient(135deg, #22c55e, #16a34a);
-                color: white;
-                border: none;
-                padding: 16px 0;
-                width: 100%;
-                border-radius: 12px;
-                font-size: 1.1rem;
-                font-weight: 700;
-                cursor: pointer;
-                box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
-                transition: transform 0.2s, box-shadow 0.2s;
-                letter-spacing: 1px;
-                text-transform: uppercase;
-            " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 25px rgba(34, 197, 94, 0.5)'"
-                onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(34, 197, 94, 0.4)'">
-                CLAIM REWARD
-            </button>
-            <button onclick="closeWinnerOverlay()"
-                style="background: none; border: none; color: #64748b; margin-top: 20px; cursor: pointer; font-size: 0.9rem; transition: color 0.2s;"
-                onmouseover="this.style.color='#94a3b8'">Close</button>
-        </div>
-    </div>
-
-    <!-- MY WINS MODAL -->
-    <div id="my-wins-modal"
-        style="display: none; position: fixed; inset: 0; z-index: 20000; justify-content: center; align-items: center; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px);">
+    <!-- ==================== PRIZE POOL MODAL ==================== -->
+    <div id="reward-modal" style="display:none; position:fixed; inset:0; z-index:20000; justify-content:center; align-items:center; background:rgba(0,0,0,0.88); backdrop-filter:blur(10px);">
         <div style="
             background: linear-gradient(145deg, #1e293b, #0f172a);
-            border: 1px solid rgba(148, 163, 184, 0.1);
-            width: 100%; max-width: 500px; height: 80vh; max-height: 600px;
-            border-radius: 20px;
-            display: flex; flex-direction: column;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            animation: slideUp 0.3s ease-out;
-            overflow: hidden;
+            border: 1px solid rgba(255,215,0,0.15);
+            width:92%; max-width:420px; border-radius:24px;
+            box-shadow: 0 0 60px rgba(255,215,0,0.08), 0 25px 50px rgba(0,0,0,0.5);
+            animation: modalSlideIn 0.35s cubic-bezier(0.16,1,0.3,1);
+            overflow:hidden;
         ">
-            <div
-                style="padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2);">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span style="font-size: 1.5rem;">🏅</span>
-                    <h2
-                        style="margin: 0; color: white; font-family: 'Teko', sans-serif; font-size: 1.8rem; letter-spacing: 1px;">
-                        MY WINNINGS</h2>
-                </div>
-                <button onclick="closeMyWins()"
-                    style="background: rgba(255,255,255,0.1); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer;">✕</button>
+            <!-- Header -->
+            <div style="padding:24px 24px 0; text-align:center; position:relative;">
+                <button onclick="closeRewards()" style="position:absolute; top:16px; right:16px; background:rgba(255,255,255,0.08); border:none; color:#94a3b8; width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:1.1rem; display:flex; align-items:center; justify-content:center;">✕</button>
+                <div style="font-size:3.5rem; margin-bottom:8px; filter:drop-shadow(0 0 12px rgba(255,215,0,0.4));">🏆</div>
+                <h2 style="color:#FFD700; margin:0 0 4px; font-family:'Teko',sans-serif; font-size:2.2rem; letter-spacing:2px; background:linear-gradient(to right,#FFD700,#FDB931); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">PRIZE POOL</h2>
+                <p style="color:#94a3b8; font-size:0.85rem; margin:0 0 20px;">Win these rewards by ranking in the top!</p>
             </div>
-
-            <div id="my-wins-list"
-                style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; scrollbar-color: #475569 #1e293b;">
-                <!-- Rewards injected here -->
-                <div style="text-align: center; color: #64748b; padding-top: 50px;">Loading rewards...</div>
+            <!-- Reward List -->
+            <div id="reward-list-container" style="max-height:340px; overflow-y:auto; padding:0 20px 20px; display:flex; flex-direction:column; gap:12px; scrollbar-width:thin; scrollbar-color:#475569 transparent;">
+                <div style="text-align:center; color:#64748b; padding:30px;">Loading...</div>
+            </div>
+            <!-- Footer -->
+            <div style="padding:16px 20px; border-top:1px solid rgba(255,255,255,0.05); background:rgba(0,0,0,0.15);">
+                <button onclick="closeRewards()" style="background:rgba(255,255,255,0.06); color:#cbd5e1; border:1px solid rgba(255,255,255,0.08); padding:12px 0; border-radius:12px; font-weight:600; cursor:pointer; width:100%; font-size:1rem; transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.06)'">Close</button>
             </div>
         </div>
     </div>
 
+    <!-- ==================== MY WINS MODAL ==================== -->
+    <div id="my-wins-modal" style="display:none; position:fixed; inset:0; z-index:20000; justify-content:center; align-items:center; background:rgba(0,0,0,0.88); backdrop-filter:blur(10px);">
+        <div style="
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            border: 1px solid rgba(34,197,94,0.15);
+            width:92%; max-width:420px; max-height:85vh;
+            border-radius:24px;
+            box-shadow: 0 0 60px rgba(34,197,94,0.06), 0 25px 50px rgba(0,0,0,0.5);
+            animation: modalSlideIn 0.35s cubic-bezier(0.16,1,0.3,1);
+            display:flex; flex-direction:column; overflow:hidden;
+        ">
+            <!-- Header -->
+            <div style="padding:20px 24px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.15); flex-shrink:0;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg,rgba(34,197,94,0.2),rgba(16,185,129,0.1)); display:flex; align-items:center; justify-content:center; font-size:1.3rem;">🏅</div>
+                    <div>
+                        <h2 style="margin:0; color:white; font-family:'Teko',sans-serif; font-size:1.6rem; letter-spacing:1px; line-height:1;">MY WINNINGS</h2>
+                        <div id="wins-count-badge" style="font-size:0.7rem; color:#94a3b8;"></div>
+                    </div>
+                </div>
+                <button onclick="closeMyWins()" style="background:rgba(255,255,255,0.08); border:none; color:white; width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:0.9rem;">✕</button>
+            </div>
+            <!-- Wins List -->
+            <div id="my-wins-list" style="flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:10px; scrollbar-width:thin; scrollbar-color:#475569 #1e293b; min-height:200px;">
+                <div style="text-align:center; color:#64748b; padding-top:50px;">Loading rewards...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== WINNER OVERLAY ==================== -->
+    <div id="winner-overlay" style="display:none; position:fixed; inset:0; z-index:25000; justify-content:center; align-items:center; background:rgba(0,0,0,0.92); backdrop-filter:blur(12px);">
+        <canvas id="confetti-canvas" style="position:absolute; inset:0; pointer-events:none; z-index:1;"></canvas>
+        <!-- Glow Ring -->
+        <div id="winner-glow" style="position:absolute; width:350px; height:350px; border-radius:50%; background:radial-gradient(circle,rgba(255,215,0,0.12) 0%,transparent 70%); animation:glowPulse 2s ease-in-out infinite; z-index:2;"></div>
+        <!-- Card -->
+        <div style="
+            background: linear-gradient(145deg, rgba(30,41,59,0.95), rgba(15,23,42,0.98));
+            border: 1.5px solid rgba(255,215,0,0.25);
+            box-shadow: 0 0 80px rgba(255,215,0,0.12), inset 0 1px 0 rgba(255,255,255,0.05);
+            padding:36px 30px 30px;
+            border-radius:28px;
+            text-align:center;
+            width:88%; max-width:380px;
+            position:relative; z-index:10;
+            opacity:0; transform:scale(0.85) translateY(20px);
+            animation: winnerCardIn 0.6s cubic-bezier(0.16,1,0.3,1) 0.15s forwards;
+        ">
+            <!-- Trophy with rank-based styling -->
+            <div id="winner-trophy" style="font-size:4.5rem; margin-bottom:6px; animation:trophyBounce 1.5s ease-in-out infinite;">🏆</div>
+
+            <!-- Victory Text -->
+            <div id="winner-title" style="
+                font-family:'Teko',sans-serif; font-size:3.8rem; line-height:1; margin:0 0 2px;
+                background:linear-gradient(to right,#FFD700,#FDB931,#FFD700);
+                -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+                filter:drop-shadow(0 0 15px rgba(255,215,0,0.3));
+                letter-spacing:3px;
+            ">VICTORY!</div>
+
+            <!-- Rank Badge -->
+            <div id="winner-rank-badge" style="
+                display:inline-flex; align-items:center; gap:6px;
+                background:linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,165,0,0.08));
+                border:1px solid rgba(255,215,0,0.3);
+                padding:6px 18px; border-radius:30px; margin-bottom:20px;
+                font-weight:700; color:#FFD700; font-size:1rem; letter-spacing:1px;
+            ">Rank #1</div>
+
+            <!-- Reward Card -->
+            <div id="winner-reward-card" style="
+                background:linear-gradient(135deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01));
+                border:1px solid rgba(255,255,255,0.08);
+                padding:16px; border-radius:18px; margin-bottom:24px;
+                display:flex; align-items:center; gap:16px; text-align:left;
+                animation: rewardCardIn 0.5s ease-out 0.5s both;
+            ">
+                <div id="winner-reward-img" style="
+                    width:64px; height:64px; border-radius:14px;
+                    background:rgba(0,0,0,0.3); overflow:hidden;
+                    display:flex; align-items:center; justify-content:center;
+                    font-size:2.2rem; flex-shrink:0;
+                    box-shadow:0 0 20px rgba(255,215,0,0.15);
+                    border:1.5px solid rgba(255,215,0,0.2);
+                ">🎁</div>
+                <div style="flex:1; min-width:0;">
+                    <div style="font-size:0.7rem; color:#94a3b8; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:3px;">Your Reward</div>
+                    <div id="winner-reward-name" style="color:#fff; font-weight:700; font-size:1.25rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Gold Prize</div>
+                    <div id="winner-reward-rank" style="color:#a78bfa; font-size:0.8rem; font-weight:600; margin-top:2px;">Rank #1</div>
+                </div>
+            </div>
+
+            <!-- Claim Button -->
+            <button onclick="claimWinnerReward()" id="winner-claim-btn" style="
+                background:linear-gradient(135deg,#22c55e,#16a34a);
+                color:white; border:none; padding:15px 0; width:100%;
+                border-radius:14px; font-size:1.05rem; font-weight:700;
+                cursor:pointer; letter-spacing:1.5px; text-transform:uppercase;
+                box-shadow:0 4px 20px rgba(34,197,94,0.35);
+                transition:transform 0.15s,box-shadow 0.15s;
+                position:relative; overflow:hidden;
+            " onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(34,197,94,0.45)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 20px rgba(34,197,94,0.35)'">
+                <span id="winner-claim-text">CLAIM REWARD</span>
+            </button>
+
+            <!-- Close -->
+            <button onclick="closeWinnerOverlay()" style="background:none; border:none; color:#64748b; margin-top:16px; cursor:pointer; font-size:0.85rem; padding:8px 20px; transition:color 0.2s;" onmouseover="this.style.color='#94a3b8'" onmouseout="this.style.color='#64748b'">Close</button>
+        </div>
+    </div>
+
+    <!-- ==================== ANIMATIONS ==================== -->
     <style>
-        @keyframes popIn {
-            to {
-                opacity: 1;
-                transform: scale(1);
-            }
+        @keyframes popIn { to { opacity:1; transform:scale(1); } }
+        @keyframes slideUp { from { transform:translateY(50px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+        @keyframes bounce { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-10px); } }
+        @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+
+        @keyframes modalSlideIn {
+            from { transform:translateY(40px) scale(0.96); opacity:0; }
+            to { transform:translateY(0) scale(1); opacity:1; }
         }
-
-        @keyframes slideUp {
-            from {
-                transform: translateY(50px);
-                opacity: 0;
-            }
-
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
+        @keyframes winnerCardIn {
+            from { opacity:0; transform:scale(0.85) translateY(20px); }
+            to { opacity:1; transform:scale(1) translateY(0); }
         }
-
-        @keyframes bounce {
-
-            0%,
-            100% {
-                transform: translateY(0);
-            }
-
-            50% {
-                transform: translateY(-10px);
-            }
+        @keyframes rewardCardIn {
+            from { opacity:0; transform:translateX(-15px); }
+            to { opacity:1; transform:translateX(0); }
         }
-
-        @keyframes spin {
-            from {
-                transform: rotate(0deg);
-            }
-
-            to {
-                transform: rotate(360deg);
-            }
+        @keyframes trophyBounce {
+            0%,100% { transform:translateY(0) rotate(0deg); }
+            25% { transform:translateY(-12px) rotate(-5deg); }
+            75% { transform:translateY(-6px) rotate(5deg); }
+        }
+        @keyframes glowPulse {
+            0%,100% { transform:scale(1); opacity:0.6; }
+            50% { transform:scale(1.15); opacity:1; }
+        }
+        @keyframes shineSlide {
+            0% { transform:translateX(-100%); }
+            100% { transform:translateX(200%); }
+        }
+        @keyframes claimSuccess {
+            0% { transform:scale(1); }
+            50% { transform:scale(1.08); }
+            100% { transform:scale(1); }
+        }
+        @keyframes fadeInUp {
+            from { opacity:0; transform:translateY(8px); }
+            to { opacity:1; transform:translateY(0); }
         }
     </style>
 
+    <!-- ==================== REWARD LOGIC ==================== -->
     <script>
-        // --- UTILS: CONFETTI ---
-        const startConfetti = () => {
+    (function() {
+        // --- CONFETTI ENGINE ---
+        let confettiAnimId = null;
+        function startConfetti() {
             const canvas = document.getElementById('confetti-canvas');
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
 
-            const particles = [];
-            const colors = ['#FFD700', '#FFA500', '#FF4500', '#8A2BE2', '#32CD32'];
+            if (confettiAnimId) cancelAnimationFrame(confettiAnimId);
 
-            for (let i = 0; i < 100; i++) {
+            const particles = [];
+            const colors = ['#FFD700','#FFA500','#FF4500','#8A2BE2','#32CD32','#00CED1','#FF69B4','#7B68EE'];
+            const shapes = ['circle','rect','star'];
+
+            for (let i = 0; i < 150; i++) {
                 particles.push({
                     x: Math.random() * canvas.width,
                     y: Math.random() * canvas.height - canvas.height,
-                    vx: Math.random() * 4 - 2,
-                    vy: Math.random() * 4 + 2,
+                    vx: Math.random() * 6 - 3,
+                    vy: Math.random() * 5 + 3,
                     color: colors[Math.floor(Math.random() * colors.length)],
-                    size: Math.random() * 8 + 4
+                    size: Math.random() * 7 + 3,
+                    shape: shapes[Math.floor(Math.random() * shapes.length)],
+                    rotation: Math.random() * 360,
+                    rotSpeed: Math.random() * 8 - 4,
+                    opacity: 1
                 });
             }
 
-            let animationId;
             const animate = () => {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                particles.forEach((p, i) => {
+                let alive = false;
+                particles.forEach(p => {
                     p.y += p.vy;
                     p.x += p.vx;
-                    if (p.y > canvas.height) p.y = -10;
+                    p.rotation += p.rotSpeed;
+                    p.vy += 0.05; // gravity
+                    if (p.y > canvas.height + 20) {
+                        p.opacity -= 0.02;
+                        if (p.opacity <= 0) return;
+                    }
+                    alive = true;
+                    ctx.save();
+                    ctx.globalAlpha = Math.max(0, p.opacity);
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.rotation * Math.PI / 180);
                     ctx.fillStyle = p.color;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                    ctx.fill();
+                    if (p.shape === 'rect') {
+                        ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size * 0.6);
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(0, 0, p.size/2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.restore();
                 });
-                animationId = requestAnimationFrame(animate);
+                if (alive) confettiAnimId = requestAnimationFrame(animate);
+                else { ctx.clearRect(0,0,canvas.width,canvas.height); confettiAnimId = null; }
             };
             animate();
 
-            // Stop after 5 seconds
             setTimeout(() => {
-                cancelAnimationFrame(animationId);
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-            }, 5000);
-        };
+                particles.forEach(p => p.vy += 3);
+            }, 4000);
 
-        // --- REWARD LOGIC ---
+            setTimeout(() => {
+                if (confettiAnimId) { cancelAnimationFrame(confettiAnimId); confettiAnimId = null; }
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+            }, 7000);
+        }
 
-        // Fetch Rewards on Load for Prize Pool
-        window.currentRewards = [];
-        async function fetchCurrentRewards() {
+        // --- SHOW REWARDS (PRIZE POOL) ---
+        async function showRewards() {
+            const modal = document.getElementById('reward-modal');
+            const container = document.getElementById('reward-list-container');
+            modal.style.display = 'flex';
+
+            // Use cached rewards first, then fetch
+            const cachedRewards = window.activeRewards || window.currentRewards || [];
+            if (cachedRewards.length > 0) {
+                renderPrizePool(container, cachedRewards);
+            }
+
             try {
                 const res = await fetch(`${SERVER_URL}/api/tournament-rewards`);
                 const data = await res.json();
-                if (data.rewards) window.currentRewards = data.rewards;
+                if (data.rewards && data.rewards.length > 0) {
+                    renderPrizePool(container, data.rewards);
+                } else if (cachedRewards.length === 0) {
+                    container.innerHTML = `
+                        <div style="text-align:center; color:#94a3b8; padding:40px 20px; background:rgba(255,255,255,0.02); border-radius:16px; border:1px dashed rgba(255,255,255,0.08);">
+                            <div style="font-size:3rem; opacity:0.4; margin-bottom:12px;">🎁</div>
+                            <div style="font-size:1rem; color:#cbd5e1; margin-bottom:4px;">No prizes yet</div>
+                            <div style="font-size:0.8rem;">Prizes will appear when admin configures rewards</div>
+                        </div>`;
+                }
             } catch (e) {
-                console.error("Failed to fetch rewards", e);
+                if (cachedRewards.length === 0) {
+                    container.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Error loading rewards</div>`;
+                }
             }
         }
-        fetchCurrentRewards();
-        setInterval(fetchCurrentRewards, 60000);
 
-        // My Wins Modal
+        function renderPrizePool(container, rewards) {
+            // Find max rank for "TOP X PLAYERS" banner
+            const maxRank = Math.max(...rewards.map(r => parseInt(r.max) || 0));
+
+            container.innerHTML = `
+                <!-- TOP X BANNER -->
+                <div style="
+                    background:linear-gradient(135deg,rgba(255,215,0,0.08),rgba(255,165,0,0.04));
+                    border:1.5px solid rgba(255,215,0,0.2);
+                    border-radius:14px; padding:14px 18px;
+                    text-align:center; margin-bottom:4px;
+                    position:relative; overflow:hidden;
+                ">
+                    <div style="position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,215,0,0.05),transparent); animation:shineSlide 3s infinite;"></div>
+                    <div style="font-size:1.6rem; font-family:'Teko',sans-serif; color:#FFD700; font-weight:700; letter-spacing:2px; line-height:1;">
+                        TOP ${maxRank} PLAYER${maxRank > 1 ? 'S' : ''} WIN REWARDS!
+                    </div>
+                    <div style="font-size:0.75rem; color:#94a3b8; margin-top:4px;">Finish in the winning ranks to claim</div>
+                </div>
+
+                ${rewards.map((r, i) => {
+                    const gradients = [
+                        'linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.06))',
+                        'linear-gradient(135deg,rgba(192,192,192,0.10),rgba(138,155,174,0.05))',
+                        'linear-gradient(135deg,rgba(205,127,50,0.10),rgba(160,82,45,0.05))'
+                    ];
+                    const borders = ['rgba(255,215,0,0.3)','rgba(192,192,192,0.22)','rgba(205,127,50,0.22)'];
+                    const rankBgs = ['linear-gradient(135deg,#FFD700,#F59E0B)','linear-gradient(135deg,#C0C0C0,#8a9bae)','linear-gradient(135deg,#cd7f32,#a0522d)'];
+                    const medals = ['🥇','🥈','🥉'];
+                    const bg = gradients[i] || 'linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.04))';
+                    const border = borders[i] || 'rgba(139,92,246,0.18)';
+                    const rankBg = rankBgs[i] || 'linear-gradient(135deg,#6366f1,#8b5cf6)';
+                    const medal = medals[i] || '🏅';
+                    return `
+                    <div style="
+                        background:${bg}; padding:14px; border-radius:16px;
+                        display:flex; align-items:center; gap:14px;
+                        border:1.5px solid ${border};
+                        animation:fadeInUp 0.3s ease-out ${0.1*(i+1)}s both;
+                    ">
+                        <div style="
+                            width:56px; height:56px; border-radius:14px; overflow:hidden;
+                            flex-shrink:0; border:2px solid ${border};
+                            box-shadow:0 0 15px rgba(0,0,0,0.2);
+                        ">${r.img && r.img.startsWith('http') ? `<img src="${r.img}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-size:1.8rem;">${medal}</div>`}</div>
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-size:1.05rem; color:#fff; font-weight:700; margin-bottom:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</div>
+                            <div style="display:inline-flex; align-items:center; gap:5px; background:${rankBg}; padding:3px 10px; border-radius:20px;">
+                                <span style="font-size:0.78rem; font-weight:700; color:#fff;">Rank #${r.min}${parseInt(r.min) !== parseInt(r.max) ? ' - #' + r.max : ''}</span>
+                            </div>
+                        </div>
+                        <div style="font-size:1.5rem; flex-shrink:0;">${medal}</div>
+                    </div>`;
+                }).join('')}
+            `;
+        }
+
+        function closeRewards() {
+            document.getElementById('reward-modal').style.display = 'none';
+        }
+
+        // --- MY WINS ---
         async function showMyWins() {
             const modal = document.getElementById('my-wins-modal');
             const container = document.getElementById('my-wins-list');
@@ -1941,69 +1912,90 @@
 
             const userId = localStorage.getItem('tc_user_id');
             if (!userId) {
-                container.innerHTML = `<div style="text-align: center; color: #ef4444; padding: 20px;">Please login to view wins.</div>`;
+                container.innerHTML = `<div style="text-align:center; color:#ef4444; padding:30px;">Please login to view wins.</div>`;
                 return;
             }
 
-            container.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 40px;"><div style="display:inline-block; width:30px; height:30px; border:3px solid #64748b; border-top-color:transparent; border-radius:50%; animation: spin 1s linear infinite;"></div></div>`;
+            container.innerHTML = `<div style="text-align:center; color:#94a3b8; padding:50px;"><div style="display:inline-block; width:28px; height:28px; border:3px solid #475569; border-top-color:#FFD700; border-radius:50%; animation:spin 0.8s linear infinite;"></div><div style="margin-top:12px; font-size:0.85rem;">Loading your rewards...</div></div>`;
 
             try {
                 const res = await fetch(`${SERVER_URL}/api/user-rewards?userId=${userId}`);
                 const data = await res.json();
 
+                const badge = document.getElementById('wins-count-badge');
                 if (data.rewards && data.rewards.length > 0) {
-                    container.innerHTML = data.rewards.map(r => `
+                    const unclaimed = data.rewards.filter(r => !r.is_claimed).length;
+                    if (badge) badge.innerHTML = `${data.rewards.length} reward${data.rewards.length>1?'s':''} ${unclaimed > 0 ? `<span style="color:#22c55e;">(${unclaimed} unclaimed)</span>` : ''}`;
+
+                    container.innerHTML = data.rewards.map((r, idx) => {
+                        const isUnclaimed = !r.is_claimed;
+                        const borderColor = isUnclaimed ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.05)';
+                        const bgHover = isUnclaimed ? 'rgba(34,197,94,0.06)' : 'rgba(255,255,255,0.05)';
+                        return `
                         <div style="
-                            background: rgba(255,255,255,0.03); 
-                            padding: 16px; 
-                            border-radius: 12px; 
-                            display: flex; 
-                            align-items: center; 
-                            gap: 16px; 
-                            border: 1px solid rgba(255,255,255,0.05);
-                            transition: background 0.2s;
-                        " onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-                            <div style="width: 50px; height: 50px; border-radius: 10px; overflow: hidden; background: #0f172a; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                            background:rgba(255,255,255,0.025); padding:14px 16px; border-radius:14px;
+                            display:flex; align-items:center; gap:14px;
+                            border:1px solid ${borderColor};
+                            transition:all 0.2s; animation:fadeInUp 0.3s ease-out ${0.05*idx}s both;
+                            ${isUnclaimed ? 'box-shadow:0 0 15px rgba(34,197,94,0.05);' : ''}
+                        " onmouseover="this.style.background='${bgHover}'" onmouseout="this.style.background='rgba(255,255,255,0.025)'">
+                            <!-- Reward Image -->
+                            <div style="width:48px; height:48px; border-radius:12px; overflow:hidden; background:#0f172a; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:1.4rem; border:1.5px solid rgba(255,255,255,0.06);">
                                 ${r.reward_image && r.reward_image.startsWith('http') ? `<img src="${r.reward_image}" style="width:100%;height:100%;object-fit:cover;">` : '🎁'}
                             </div>
-                            <div style="flex: 1;">
-                                <div style="color: #fff; font-weight: 700; font-size: 1rem; margin-bottom: 2px;">${r.reward_name}</div>
-                                <div style="color: #94a3b8; font-size: 0.8rem; display: flex; align-items: center; gap: 8px;">
-                                    <span style="background: rgba(255, 215, 0, 0.1); color: #FFD700; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Rank #${r.rank_achieved}</span>
-                                    <span>${new Date(r.created_at).toLocaleDateString()}</span>
+                            <!-- Info -->
+                            <div style="flex:1; min-width:0;">
+                                <div style="color:#fff; font-weight:700; font-size:0.95rem; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.reward_name}</div>
+                                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                    <span style="background:rgba(255,215,0,0.1); color:#FFD700; padding:2px 7px; border-radius:6px; font-weight:700; font-size:0.7rem;">Rank #${r.rank_achieved}</span>
+                                    <span style="color:#64748b; font-size:0.7rem;">${new Date(r.created_at).toLocaleDateString()}</span>
                                 </div>
                             </div>
-                            ${!r.is_claimed ?
-                            `<button onclick="claimReward('${r.id}', this)" style="
-                                background: linear-gradient(135deg, #22c55e, #16a34a); 
-                                color: white; border: none; padding: 8px 16px; 
-                                border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.85rem;
-                                box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
-                            ">Claim</button>`
+                            <!-- Action -->
+                            ${isUnclaimed ?
+                            `<button onclick="claimReward('${r.id}',this)" style="
+                                background:linear-gradient(135deg,#22c55e,#16a34a);
+                                color:white; border:none; padding:9px 18px;
+                                border-radius:10px; cursor:pointer; font-weight:700; font-size:0.8rem;
+                                box-shadow:0 3px 12px rgba(34,197,94,0.3);
+                                transition:transform 0.15s,box-shadow 0.15s;
+                                white-space:nowrap; position:relative; overflow:hidden;
+                            " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                                <span style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent);animation:shineSlide 2s infinite;"></span>
+                                <span style="position:relative;">CLAIM</span>
+                            </button>`
                             :
-                            `<div style="display: flex; align-items: center; gap: 6px; color: #10b981; font-weight: 600; font-size: 0.85rem; background: rgba(16, 185, 129, 0.1); padding: 6px 12px; border-radius: 20px;">
-                                <span>✓</span> Claimed
+                            `<div style="display:flex; align-items:center; gap:5px; color:#10b981; font-weight:600; font-size:0.78rem; background:rgba(16,185,129,0.08); padding:6px 12px; border-radius:20px; white-space:nowrap;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                                Claimed
                             </div>`
-                        }
-                        </div>
-                    `).join('');
+                            }
+                        </div>`;
+                    }).join('');
                 } else {
+                    if (badge) badge.innerHTML = '';
                     container.innerHTML = `
-                        <div style="text-align: center; color: #94a3b8; padding: 40px; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed rgba(255,255,255,0.1);">
-                            <div style="font-size: 3rem; opacity: 0.5; margin-bottom: 15px;">🦗</div>
-                            <div style="font-size: 1.1rem; color: #cbd5e1; margin-bottom: 5px;">No wins yet</div>
-                            <div style="font-size: 0.9rem;">Compete in tournaments to earn rewards!</div>
-                        </div>
-                    `;
+                        <div style="text-align:center; color:#94a3b8; padding:50px 20px; background:rgba(255,255,255,0.015); border-radius:16px; border:1px dashed rgba(255,255,255,0.08);">
+                            <div style="font-size:3.5rem; opacity:0.4; margin-bottom:16px;">🏆</div>
+                            <div style="font-size:1.1rem; color:#cbd5e1; margin-bottom:6px; font-weight:600;">No wins yet</div>
+                            <div style="font-size:0.85rem; line-height:1.5;">Compete in tournaments and<br>finish in top ranks to win rewards!</div>
+                        </div>`;
                 }
             } catch (e) {
-                container.innerHTML = `<div style="color: #ef4444; text-align: center; padding: 20px;">Failed to load rewards.</div>`;
+                container.innerHTML = `<div style="color:#ef4444; text-align:center; padding:30px;">Failed to load rewards.</div>`;
             }
         }
 
+        function closeMyWins() {
+            document.getElementById('my-wins-modal').style.display = 'none';
+        }
+
+        // --- CLAIM REWARD (from My Wins list) ---
         async function claimReward(rewardId, btnElement) {
             btnElement.disabled = true;
-            btnElement.innerHTML = `<div style="display:inline-block; width:12px; height:12px; border:2px solid white; border-top-color:transparent; border-radius:50%; animation: spin 1s linear infinite;"></div>`;
+            const origW = btnElement.offsetWidth;
+            btnElement.style.width = origW + 'px';
+            btnElement.innerHTML = `<div style="display:inline-block; width:14px; height:14px; border:2.5px solid rgba(255,255,255,0.3); border-top-color:white; border-radius:50%; animation:spin 0.6s linear infinite;"></div>`;
 
             try {
                 const res = await fetch(`${SERVER_URL}/api/claim-reward`, {
@@ -2014,75 +2006,164 @@
                 const data = await res.json();
 
                 if (data.success) {
-                    // Success animation/state
                     startConfetti();
-                    btnElement.parentNode.innerHTML = `<div style="display: flex; align-items: center; gap: 6px; color: #10b981; font-weight: 600; font-size: 0.85rem; background: rgba(16, 185, 129, 0.1); padding: 6px 12px; border-radius: 20px; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);"><span>✓</span> Claimed</div>`;
+                    // Replace button with claimed badge
+                    const parent = btnElement.parentNode;
+                    btnElement.remove();
+                    const badge = document.createElement('div');
+                    badge.style.cssText = 'display:flex; align-items:center; gap:5px; color:#10b981; font-weight:600; font-size:0.78rem; background:rgba(16,185,129,0.08); padding:6px 12px; border-radius:20px; animation:claimSuccess 0.4s ease-out; white-space:nowrap;';
+                    badge.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Claimed`;
+                    parent.appendChild(badge);
 
-                    // Show small toast
-                    const toast = document.createElement('div');
-                    toast.innerHTML = '🎉 Reward Claimed!';
-                    toast.style.cssText = 'position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #22c55e; color: white; padding: 10px 20px; border-radius: 20px; font-weight: 600; z-index: 30000; box-shadow: 0 5px 15px rgba(0,0,0,0.3); animation: slideUp 0.3s ease-out;';
-                    document.body.appendChild(toast);
-                    setTimeout(() => toast.remove(), 3000);
+                    // Update border color
+                    const row = parent;
+                    if (row) row.style.borderColor = 'rgba(255,255,255,0.05)';
+
+                    // Toast
+                    showClaimToast('Reward Claimed Successfully!');
+
+                    // Update count badge
+                    const countBadge = document.getElementById('wins-count-badge');
+                    if (countBadge) {
+                        const match = countBadge.textContent.match(/\((\d+) unclaimed\)/);
+                        if (match) {
+                            const newCount = parseInt(match[1]) - 1;
+                            if (newCount > 0) countBadge.innerHTML = countBadge.innerHTML.replace(/\d+ unclaimed/, newCount + ' unclaimed');
+                            else countBadge.innerHTML = countBadge.innerHTML.replace(/<span[^>]*>\([^)]+\)<\/span>/, '');
+                        }
+                    }
                 } else {
-                    alert("Error: " + data.error);
+                    showClaimToast('Error: ' + (data.error || 'Unknown error'), true);
                     btnElement.disabled = false;
-                    btnElement.innerText = "Claim";
+                    btnElement.style.width = '';
+                    btnElement.innerHTML = '<span style="position:relative;">CLAIM</span>';
                 }
             } catch (e) {
-                alert("Network error");
+                showClaimToast('Network error, try again', true);
                 btnElement.disabled = false;
-                btnElement.innerText = "Claim";
+                btnElement.style.width = '';
+                btnElement.innerHTML = '<span style="position:relative;">CLAIM</span>';
             }
         }
 
-        function closeMyWins() {
-            document.getElementById('my-wins-modal').style.display = 'none';
+        function showClaimToast(msg, isError) {
+            const existing = document.getElementById('claim-toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.id = 'claim-toast';
+            toast.innerHTML = `${isError ? '❌' : '🎉'} ${msg}`;
+            toast.style.cssText = `position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:${isError ? '#ef4444' : '#22c55e'}; color:white; padding:12px 24px; border-radius:30px; font-weight:600; font-size:0.9rem; z-index:30000; box-shadow:0 8px 25px rgba(0,0,0,0.3); animation:slideUp 0.3s ease-out; white-space:nowrap;`;
+            document.body.appendChild(toast);
+            setTimeout(() => { if (toast.parentNode) toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; }, 2500);
+            setTimeout(() => toast.remove(), 3000);
         }
 
-        // Winner Overlay Logic
+        // --- WINNER OVERLAY ---
         let pendingRewardId = null;
-
-        async function checkNewRewards() {
-            const userId = localStorage.getItem('tc_user_id');
-            if (!userId) return;
-
-            try {
-                const res = await fetch(`${SERVER_URL}/api/user-rewards?userId=${userId}`);
-                const data = await res.json();
-
-                if (data.rewards && data.rewards.length > 0) {
-                    const newReward = data.rewards.find(r => !r.is_claimed);
-                    if (newReward) {
-                        showWinnerOverlay(newReward);
-                    }
-                }
-            } catch (e) { console.error(e); }
-        }
+        let winnerOverlayShown = false;
 
         function showWinnerOverlay(reward) {
-            pendingRewardId = reward.id;
+            if (winnerOverlayShown) return; // Prevent double-show
+            winnerOverlayShown = true;
 
-            document.getElementById('winner-message').innerText = `You placed #${reward.rank_achieved} in the tournament!`;
-            document.getElementById('winner-reward-name').innerText = reward.reward_name;
-            document.getElementById('winner-reward-rank').innerText = `Rank #${reward.rank_achieved}`;
+            pendingRewardId = reward.id || null;
+            const rank = reward.rank_achieved || 1;
+            const hasReward = reward.reward_name && reward.reward_name !== null;
 
-            const imgContainer = document.getElementById('winner-reward-img');
-            if (reward.reward_image && reward.reward_image.startsWith('http')) {
-                imgContainer.innerHTML = `<img src="${reward.reward_image}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">`;
+            // Trophy icon based on rank
+            const trophyEl = document.getElementById('winner-trophy');
+            if (rank === 1) trophyEl.innerHTML = '🏆';
+            else if (rank === 2) trophyEl.innerHTML = '🥈';
+            else if (rank === 3) trophyEl.innerHTML = '🥉';
+            else trophyEl.innerHTML = '🏅';
+
+            // Title based on rank
+            const titleEl = document.getElementById('winner-title');
+            if (rank === 1) titleEl.textContent = 'VICTORY!';
+            else if (rank <= 3) titleEl.textContent = 'TOP 3!';
+            else titleEl.textContent = 'YOU WON!';
+
+            // Rank badge
+            document.getElementById('winner-rank-badge').innerHTML = `🏅 Rank #${rank}`;
+
+            // Reward card
+            const rewardCard = document.getElementById('winner-reward-card');
+            const claimBtn = document.getElementById('winner-claim-btn');
+            const claimText = document.getElementById('winner-claim-text');
+
+            if (hasReward) {
+                rewardCard.style.display = 'flex';
+                document.getElementById('winner-reward-name').textContent = reward.reward_name;
+                document.getElementById('winner-reward-rank').textContent = `Rank #${rank} Reward`;
+
+                const imgContainer = document.getElementById('winner-reward-img');
+                if (reward.reward_image && reward.reward_image.startsWith('http')) {
+                    imgContainer.innerHTML = `<img src="${reward.reward_image}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">`;
+                } else {
+                    imgContainer.innerHTML = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🎁';
+                }
+
+                claimBtn.style.display = 'block';
+                claimText.textContent = 'CLAIM REWARD';
+                claimBtn.disabled = false;
+
+                // If no rewardId yet, try to fetch it from API
+                if (!pendingRewardId) {
+                    fetchPendingRewardId();
+                }
             } else {
-                imgContainer.innerHTML = '🎁';
+                rewardCard.style.display = 'none';
+                claimBtn.style.display = 'none';
             }
+
+            // Glow color based on rank
+            const glowEl = document.getElementById('winner-glow');
+            if (rank === 1) glowEl.style.background = 'radial-gradient(circle,rgba(255,215,0,0.15) 0%,transparent 70%)';
+            else if (rank === 2) glowEl.style.background = 'radial-gradient(circle,rgba(192,192,192,0.12) 0%,transparent 70%)';
+            else if (rank === 3) glowEl.style.background = 'radial-gradient(circle,rgba(205,127,50,0.12) 0%,transparent 70%)';
+            else glowEl.style.background = 'radial-gradient(circle,rgba(139,92,246,0.12) 0%,transparent 70%)';
 
             document.getElementById('winner-overlay').style.display = 'flex';
             startConfetti();
         }
 
+        async function fetchPendingRewardId() {
+            const userId = localStorage.getItem('tc_user_id');
+            if (!userId) return;
+
+            // Poll a few times since reward distribution may take a moment
+            for (let attempt = 0; attempt < 5; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                try {
+                    const res = await fetch(`${SERVER_URL}/api/user-rewards?userId=${userId}`);
+                    const data = await res.json();
+                    if (data.rewards && data.rewards.length > 0) {
+                        const unclaimed = data.rewards.find(r => !r.is_claimed);
+                        if (unclaimed) {
+                            pendingRewardId = unclaimed.id;
+                            console.log('✅ Found pending reward ID:', pendingRewardId);
+                            return;
+                        }
+                    }
+                } catch (e) { /* retry */ }
+            }
+        }
+
         async function claimWinnerReward() {
-            if (!pendingRewardId) return;
+            if (!pendingRewardId) {
+                // Try fetching one more time
+                await fetchPendingRewardId();
+                if (!pendingRewardId) {
+                    showClaimToast('Reward not ready yet, check My Wins later', true);
+                    return;
+                }
+            }
+
             const btn = document.getElementById('winner-claim-btn');
+            const claimText = document.getElementById('winner-claim-text');
             btn.disabled = true;
-            btn.innerText = "CLAIMING...";
+            claimText.textContent = 'CLAIMING...';
 
             try {
                 const res = await fetch(`${SERVER_URL}/api/claim-reward`, {
@@ -2093,25 +2174,83 @@
                 const data = await res.json();
 
                 if (data.success) {
-                    closeWinnerOverlay();
-                    showMyWins(); // Open My Wins to show it's claimed
-                    startConfetti(); // User gets confetti again in My Wins potentially, or here
+                    // Success animation
+                    btn.style.background = 'linear-gradient(135deg,#10b981,#059669)';
+                    claimText.textContent = '✓ CLAIMED!';
+                    btn.style.animation = 'claimSuccess 0.4s ease-out';
+                    startConfetti();
+
+                    showClaimToast('Reward Claimed Successfully!');
+
+                    setTimeout(() => {
+                        closeWinnerOverlay();
+                    }, 2000);
                 } else {
-                    alert("Error: " + data.error);
+                    showClaimToast('Error: ' + (data.error || 'Unknown'), true);
                     btn.disabled = false;
-                    btn.innerText = "CLAIM REWARD";
+                    claimText.textContent = 'CLAIM REWARD';
                 }
             } catch (e) {
+                showClaimToast('Network error', true);
                 btn.disabled = false;
-                btn.innerText = "CLAIM REWARD";
+                claimText.textContent = 'CLAIM REWARD';
             }
         }
 
         function closeWinnerOverlay() {
             document.getElementById('winner-overlay').style.display = 'none';
+            winnerOverlayShown = false;
         }
 
-        setTimeout(checkNewRewards, 2000);
+        // --- CHECK FOR UNCLAIMED REWARDS ON PAGE LOAD ---
+        async function checkNewRewards() {
+            const userId = localStorage.getItem('tc_user_id');
+            if (!userId) return;
+
+            try {
+                const res = await fetch(`${SERVER_URL}/api/user-rewards?userId=${userId}`);
+                const data = await res.json();
+
+                if (data.rewards && data.rewards.length > 0) {
+                    const unclaimed = data.rewards.find(r => !r.is_claimed);
+                    if (unclaimed) {
+                        showWinnerOverlay({
+                            id: unclaimed.id,
+                            rank_achieved: unclaimed.rank_achieved,
+                            reward_name: unclaimed.reward_name,
+                            reward_image: unclaimed.reward_image
+                        });
+                    }
+                }
+            } catch (e) { console.error('checkNewRewards error:', e); }
+        }
+
+        // Check after 2.5s (give socket time to connect)
+        setTimeout(checkNewRewards, 2500);
+
+        // --- FETCH & CACHE REWARDS ---
+        window.currentRewards = [];
+        async function fetchCurrentRewards() {
+            try {
+                const res = await fetch(`${SERVER_URL}/api/tournament-rewards`);
+                const data = await res.json();
+                if (data.rewards) window.currentRewards = data.rewards;
+            } catch (e) { /* ignore */ }
+        }
+        fetchCurrentRewards();
+        setInterval(fetchCurrentRewards, 60000);
+
+        // Expose functions globally
+        window.showRewards = showRewards;
+        window.closeRewards = closeRewards;
+        window.showMyWins = showMyWins;
+        window.closeMyWins = closeMyWins;
+        window.claimReward = claimReward;
+        window.showWinnerOverlay = showWinnerOverlay;
+        window.closeWinnerOverlay = closeWinnerOverlay;
+        window.claimWinnerReward = claimWinnerReward;
+        window.startConfetti = startConfetti;
+    })();
     </script>
 </body>
 

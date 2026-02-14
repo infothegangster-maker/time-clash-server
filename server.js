@@ -455,6 +455,53 @@ fastify.get('/api/admin/tournament/daily-schedules', async (req, reply) => {
     }
 });
 
+// Admin: Update Daily Schedule Rewards
+fastify.put('/api/admin/tournament/daily-schedule/:scheduleId', async (req, reply) => {
+    try {
+        const { scheduleId } = req.params;
+        const { rewards, playTime, leaderboardTime } = req.body;
+        const schedules = await redis.lrange('tournament:daily-schedules', 0, 99);
+
+        let found = false;
+        const updated = schedules.map(x => {
+            try {
+                const s = JSON.parse(x);
+                if (s.id === scheduleId) {
+                    found = true;
+                    if (rewards !== undefined) s.rewards = rewards;
+                    if (playTime !== undefined) {
+                        s.playTime = playTime;
+                        s.duration = (playTime + (s.leaderboardTime || 3)) * 60 * 1000;
+                    }
+                    if (leaderboardTime !== undefined) {
+                        s.leaderboardTime = leaderboardTime;
+                        s.duration = ((s.playTime || 12) + leaderboardTime) * 60 * 1000;
+                    }
+                    return JSON.stringify(s);
+                }
+                return x;
+            } catch (e) {
+                return x;
+            }
+        });
+
+        if (!found) {
+            return { error: 'Schedule not found' };
+        }
+
+        // Replace the list
+        await redis.del('tournament:daily-schedules');
+        if (updated.length > 0) {
+            await redis.rpush('tournament:daily-schedules', ...updated);
+        }
+
+        console.log(`✏️ Daily Schedule Updated: ${scheduleId}`);
+        return { success: true, message: 'Daily schedule updated' };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
 // Admin: Delete Daily Schedule
 fastify.delete('/api/admin/tournament/daily-schedule/:scheduleId', async (req, reply) => {
     try {
@@ -1464,19 +1511,33 @@ function startTournamentCheck() {
 
                 // Get winners for the archive
                 try {
-                    const top3 = await redis.zrange(currentTournamentKey, 0, 2, 'WITHSCORES');
-                    const winners = [];
-                    if (Array.isArray(top3)) {
-                        if (top3.length > 0 && typeof top3[0] === 'object') {
-                            top3.forEach(x => winners.push({ u: x.member, s: x.score }));
+                    // Get rewards config for this tournament
+                    let rewardsConfig = [];
+                    try {
+                        const rRaw = await redis.hget(`tournament:info:${currentTournamentKey}`, 'rewards');
+                        if (rRaw) rewardsConfig = JSON.parse(rRaw);
+                    } catch (e) { /* ignore */ }
+
+                    // Find max rank needed (at least top 3, or max reward rank)
+                    const maxRewardRank = rewardsConfig.length > 0
+                        ? Math.max(3, ...rewardsConfig.map(r => parseInt(r.max) || 0))
+                        : 3;
+
+                    // Get all qualifying players (up to max reward rank)
+                    const topAll = await redis.zrange(currentTournamentKey, 0, maxRewardRank - 1, 'WITHSCORES');
+                    const allWinners = [];
+                    if (Array.isArray(topAll)) {
+                        if (topAll.length > 0 && typeof topAll[0] === 'object') {
+                            topAll.forEach(x => allWinners.push({ u: x.member, s: x.score }));
                         } else {
-                            for (let i = 0; i < top3.length; i += 2) {
-                                winners.push({ u: top3[i], s: top3[i + 1] });
+                            for (let i = 0; i < topAll.length; i += 2) {
+                                allWinners.push({ u: topAll[i], s: topAll[i + 1] });
                             }
                         }
                     }
+
                     // Resolve display names
-                    for (let w of winners) {
+                    for (let w of allWinners) {
                         try {
                             const meta = await redis.hgetall(`user_meta:${w.u}`);
                             if (meta && meta.username) { w.n = meta.username; w.e = meta.email || ''; }
@@ -1487,6 +1548,29 @@ function startTournamentCheck() {
                         }
                         if (!w.n) w.n = w.u;
                     }
+
+                    // Attach matching reward to each winner
+                    const winnersWithRewards = allWinners.map((w, idx) => {
+                        const rank = idx + 1;
+                        const matchedReward = rewardsConfig.find(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
+                        return {
+                            ...w,
+                            rank: rank,
+                            reward: matchedReward ? { name: matchedReward.name, img: matchedReward.img } : null
+                        };
+                    });
+
+                    // 🎉 EMIT tournament_winners to ALL clients with full details
+                    io.emit('tournament_winners', {
+                        tid: currentTournamentKey,
+                        winners: winnersWithRewards,
+                        rewards: rewardsConfig,
+                        ltl: ltl
+                    });
+                    console.log(`🏆 [BROADCAST] tournament_winners emitted: ${winnersWithRewards.length} winners, ${rewardsConfig.length} rewards`);
+
+                    // Use top 3 for archive
+                    const winners = allWinners.slice(0, 3);
 
                     archiveTournamentToSupabase(currentTournamentKey, winners).catch(e => {
                         console.error("❌ Supabase Archive Error:", e);
