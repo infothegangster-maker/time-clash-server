@@ -860,10 +860,17 @@
                     Hacking.showToast("Connected!");
                     setTimeout(() => Hacking.hideToast(), 1000);
 
-                    const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
-                    const email = localStorage.getItem('tc_email') || null;
-                    const username = localStorage.getItem('tc_username') || 'Guest';
-                    const idToken = localStorage.getItem('tc_id_token') || null;
+                    const savedId = localStorage.getItem('tc_user_id');
+                    const email = localStorage.getItem('tc_email');
+                    const username = localStorage.getItem('tc_username');
+                    const idToken = localStorage.getItem('tc_id_token');
+
+                    // Enforce login - no guest access
+                    if (!savedId || !idToken) {
+                        Hacking.showToast('Please login first!');
+                        setTimeout(() => window.location.href = 'login.html', 1500);
+                        return;
+                    }
 
                     socket.emit('ig', {
                         u: savedId,
@@ -1008,10 +1015,17 @@
                     localStorage.removeItem('skip_health_check');
                 }
 
-                const savedId = localStorage.getItem('tc_user_id') || ('guest_' + Math.floor(Math.random() * 10000));
-                const email = localStorage.getItem('tc_email') || null;
-                const username = localStorage.getItem('tc_username') || 'Guest';
-                const idToken = localStorage.getItem('tc_id_token') || null;
+                const savedId = localStorage.getItem('tc_user_id');
+                const email = localStorage.getItem('tc_email');
+                const username = localStorage.getItem('tc_username');
+                const idToken = localStorage.getItem('tc_id_token');
+
+                // Enforce login - no guest access
+                if (!savedId || !idToken) {
+                    Hacking.showToast('Please login first!');
+                    setTimeout(() => window.location.href = 'login.html', 1500);
+                    return;
+                }
 
                 socket.emit('ig', {
                     u: savedId,

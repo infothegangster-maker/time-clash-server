@@ -171,7 +171,7 @@ fastify.get('/api/admin/current-tournament', async (req, reply) => {
             let username = activeUser?.username || session?.username || null;
 
             // Fallback: Check Redis for persisted metadata
-            if ((!email || !username || username === 'Guest') && !p.userId.startsWith('guest_')) {
+            if (!email || !username || username === 'Guest') {
                 try {
                     const meta = await redis.hgetall(`user_meta:${p.userId}`);
                     if (meta) {
@@ -1510,7 +1510,7 @@ async function archiveTournamentToSupabase(tournamentId, winners) {
                     p.email = activeUser.email || '';
                 }
             }
-            if (!p.username) p.username = p.userId.startsWith('guest_') ? 'Guest' : p.userId;
+            if (!p.username) p.username = p.userId;
             if (!p.email) p.email = '';
         }
 
@@ -1590,7 +1590,7 @@ async function archiveTournamentToSupabase(tournamentId, winners) {
 
         // 7. UPDATE user lifetime stats
         for (const p of participants) {
-            if (p.userId.startsWith('guest_')) continue; // Skip guest users
+            // All users are authenticated - no guest users
 
             try {
                 // Check if user exists
@@ -1791,7 +1791,7 @@ io.on('connection', (socket) => {
 
         // PERSIST user metadata in Redis (survives disconnect + server restart)
         try {
-            if (userId && !userId.startsWith('guest_')) {
+            if (userId) {
                 await redis.hset(`user_meta:${userId}`, {
                     email: userEmail || '',
                     username: username || '',
