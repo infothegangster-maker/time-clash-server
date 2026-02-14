@@ -400,10 +400,12 @@
                 transform: scale(0) rotate(0deg);
                 opacity: 0;
             }
+
             50% {
                 transform: scale(1.2) rotate(180deg);
                 opacity: 1;
             }
+
             100% {
                 transform: scale(1) rotate(360deg);
                 opacity: 1;
@@ -415,6 +417,7 @@
                 transform: translateY(0) translateX(0) rotate(0deg);
                 opacity: 1;
             }
+
             100% {
                 transform: translateY(-200px) translateX(var(--move-x)) rotate(720deg);
                 opacity: 0;
@@ -819,6 +822,8 @@
 
             addTrys(amount) {
                 this.trys += amount;
+                // CAP health at 20 max to prevent stacking
+                if (this.trys > 20) this.trys = 20;
                 localStorage.setItem('user_trys', this.trys);
                 this.updateUI();
                 document.getElementById('refill-popup').style.display = 'none';
@@ -864,7 +869,8 @@
                         u: savedId,
                         e: email,
                         n: username,
-                        t: idToken
+                        t: idToken,
+                        m: TrysManager.mode === 'tournament' ? 't' : 'p'
                     });
                 });
 
@@ -951,12 +957,12 @@
                     title.classList.remove('congrats-animation');
                     void title.offsetWidth; // Trigger reflow
                     title.classList.add('congrats-animation');
-                    
+
                     title.innerText = "CONGRATULATIONS!";
                     title.style.color = "#22c55e";
                     icon.innerText = "🎉";
                     msg.innerHTML = "PERFECT TIMING!<br>You got it EXACT!";
-                    
+
                     // Create confetti effect
                     this.createConfetti(panel);
                 } else {
@@ -990,7 +996,7 @@
                     confetti.style.height = confetti.style.width;
                     confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '0%';
                     container.appendChild(confetti);
-                    
+
                     setTimeout(() => confetti.remove(), 3000);
                 }
             },
@@ -1011,7 +1017,8 @@
                     u: savedId,
                     e: email,
                     n: username,
-                    t: idToken
+                    t: idToken,
+                    m: TrysManager.mode === 'tournament' ? 't' : 'p'
                 });
 
                 this.startHack();

@@ -497,7 +497,7 @@ async function createTournamentFromSchedule(schedule, scheduleType, scheduleId) 
     // - Scheduled tournaments: playTime and leaderboardTime are in milliseconds
     // - Daily schedules: playTime and leaderboardTime are in minutes
     let playTime, leaderboardTime, duration;
-    
+
     if (scheduleType === 'daily') {
         // Daily schedules store time in minutes
         playTime = (schedule.playTime || 12) * 60 * 1000;
@@ -509,7 +509,7 @@ async function createTournamentFromSchedule(schedule, scheduleType, scheduleId) 
         leaderboardTime = schedule.leaderboardTime || LEADERBOARD_TIME_MS;
         duration = schedule.duration || (playTime + leaderboardTime);
     }
-    
+
     const expirySeconds = Math.ceil(duration / 1000);
     await redis.setex(`tournament:${newTournamentId}:duration`, expirySeconds, duration.toString());
     await redis.setex(`tournament:${newTournamentId}:playTime`, expirySeconds, playTime.toString());
@@ -533,7 +533,7 @@ async function createTournamentFromSchedule(schedule, scheduleType, scheduleId) 
             const phase = await getTournamentPhase(newTournamentId);
             const timeLeft = await getTournamentTimeLeft(newTournamentId);
             const lbTimeLeft = await getLeaderboardTimeLeft(newTournamentId);
-            
+
             // Only broadcast if phase is valid (not 'n')
             if (phase !== 'n' || retryCount >= maxRetries) {
                 io.emit('tu', {
@@ -571,7 +571,7 @@ setInterval(async () => {
         const now = Date.now();
         const checkWindow = 15000; // 15 seconds window
         const currentDate = new Date(now);
-        
+
         // Check one-time scheduled tournaments
         const scheduled = await redis.lrange('tournament:scheduled', 0, 99);
         if (scheduled && scheduled.length > 0) {
@@ -623,28 +623,28 @@ setInterval(async () => {
         const dailySchedules = await redis.lrange('tournament:daily-schedules', 0, 99);
         if (dailySchedules && dailySchedules.length > 0) {
             const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30 = 19800000 ms
-            
+
             // Get current time in IST
             const nowIST = new Date(now + IST_OFFSET_MS);
             const istYear = nowIST.getUTCFullYear();
             const istMonth = nowIST.getUTCMonth();
             const istDate = nowIST.getUTCDate();
             const todayStr = `${istYear}-${String(istMonth + 1).padStart(2, '0')}-${String(istDate).padStart(2, '0')}`;
-            
+
             for (const item of dailySchedules) {
                 try {
                     const dailySchedule = JSON.parse(item);
                     const [hours, minutes] = dailySchedule.time.split(':').map(Number);
-                    
+
                     // Create scheduled time in IST (treat as UTC, then subtract IST offset)
                     const scheduledIST = new Date(Date.UTC(istYear, istMonth, istDate, hours, minutes, 0, 0));
                     const scheduledTimestamp = scheduledIST.getTime() - IST_OFFSET_MS;
                     const timeDiff = now - scheduledTimestamp;
-                    
+
                     // Check if we already created a tournament for this daily schedule today
                     const lastExecutedKey = `tournament:daily-executed:${dailySchedule.id}:${todayStr}`;
                     const alreadyExecuted = await redis.get(lastExecutedKey);
-                    
+
                     if (alreadyExecuted) {
                         continue; // Already executed today
                     }
@@ -723,27 +723,27 @@ fastify.get('/api/tournament-data', async (req, reply) => {
         if (dailySchedules.length > 0) {
             const now = Date.now();
             const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30 = 19800000 ms
-            
+
             // Get current time in IST
             const nowIST = new Date(now + IST_OFFSET_MS);
             const istYear = nowIST.getUTCFullYear();
             const istMonth = nowIST.getUTCMonth();
             const istDate = nowIST.getUTCDate();
-            
+
             // Find the next daily tournament time (today or tomorrow in IST)
             const nextTimes = dailySchedules.map(daily => {
                 const [hours, minutes] = daily.time.split(':').map(Number);
-                
+
                 // Create date for scheduled time in IST (as UTC, then subtract IST offset to get actual UTC)
                 // Example: 8:00 PM IST = 20:00 IST = 14:30 UTC
                 const scheduledIST = new Date(Date.UTC(istYear, istMonth, istDate, hours, minutes, 0, 0));
                 let scheduledUTC = scheduledIST.getTime() - IST_OFFSET_MS;
-                
+
                 // If today's time has passed, use tomorrow's time
                 if (scheduledUTC <= now) {
                     scheduledUTC += 86400000; // Add 24 hours
                 }
-                
+
                 return {
                     id: daily.id,
                     scheduledTime: scheduledUTC,
@@ -754,7 +754,7 @@ fastify.get('/api/tournament-data', async (req, reply) => {
                     time: daily.time
                 };
             });
-            
+
             // Get the earliest next daily tournament
             nextDailyTournament = nextTimes.sort((a, b) => a.scheduledTime - b.scheduledTime)[0];
         }
@@ -778,8 +778,8 @@ fastify.get('/api/tournament-data', async (req, reply) => {
         let nextTournament = null;
         if (scheduled.length > 0 && nextDailyTournament) {
             // Compare scheduled vs daily, pick the earlier one
-            nextTournament = scheduled[0].scheduledTime < nextDailyTournament.scheduledTime 
-                ? scheduled[0] 
+            nextTournament = scheduled[0].scheduledTime < nextDailyTournament.scheduledTime
+                ? scheduled[0]
                 : nextDailyTournament;
         } else if (scheduled.length > 0) {
             nextTournament = scheduled[0];
@@ -804,7 +804,7 @@ fastify.get('/api/tournament-data', async (req, reply) => {
 fastify.get('/api/tournament-results', async (req, reply) => {
     try {
         const userId = req.query.userId || null;
-        
+
         if (!currentTournamentKey) {
             return { error: "No active tournament", winners: [], targetTime: null, userRank: null };
         }
@@ -817,11 +817,11 @@ fastify.get('/api/tournament-results', async (req, reply) => {
         if (!targetTime) {
             targetTime = await redis.get(targetKey2);
         }
-        
+
         // Get top 3 winners
         const top3 = await redis.zrange(currentTournamentKey, 0, 2, 'WITHSCORES');
         const winners = [];
-        
+
         if (Array.isArray(top3)) {
             if (top3.length > 0 && typeof top3[0] === 'object') {
                 top3.forEach(x => winners.push({ userId: x.member, score: x.score }));
@@ -1518,7 +1518,7 @@ async function archiveTournamentToSupabase(tournamentId, winners) {
         const custom = await getCustomTournamentTiming(tournamentId);
         const tournamentType = tournamentId.includes('_scheduled_') ? 'scheduled' :
             tournamentId.includes('_daily_') ? 'daily' :
-            tournamentId.includes('_manual_') ? 'manual' : 'auto';
+                tournamentId.includes('_manual_') ? 'manual' : 'auto';
 
         // 4. Get target time for this tournament
         let targetTime = null;
@@ -1724,7 +1724,7 @@ io.on('connection', (socket) => {
                 if (!existingTarget) {
                     existingTarget = await redis.get(targetKey2);
                 }
-                
+
                 if (existingTarget) {
                     // Target already exists for this tournament - use it
                     targetTime = parseInt(existingTarget);
@@ -1876,7 +1876,9 @@ io.on('connection', (socket) => {
         let newRecord = false;
         let rank = null;
         let bestScore = session.bestScore;
-        const currentTournamentId = getTournamentKey(session.startTime); // Use START time to handle tournament boundary items
+        // Use session's locked tournament ID (set at connect time) — NOT getTournamentKey()
+        // getTournamentKey() generates auto-keys which break custom/daily/scheduled tournaments
+        const currentTournamentId = session.tournamentId || currentTournamentKey || getTournamentKey(session.startTime);
 
         // ONLY UPDATE REDIS IF IN TOURNAMENT MODE
         if (session.mode === 't') {
@@ -1919,9 +1921,7 @@ io.on('connection', (socket) => {
             nr: newRecord ? 1 : 0,
             tl: optimizedLeaders,
             tid: currentTournamentId,
-            tl: optimizedLeaders,
-            tid: currentTournamentId,
-            rem: await getTournamentTimeLeft(session.tournamentId || currentTournamentKey), // Send remaining time logic
+            rem: await getTournamentTimeLeft(session.tournamentId || currentTournamentKey),
             ph: await getTournamentPhase(session.tournamentId || currentTournamentKey)
         });
     });

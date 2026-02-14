@@ -658,10 +658,10 @@
         async function fetchTournamentResults() {
             try {
                 const userId = localStorage.getItem('tc_user_id') || null;
-                const url = userId 
+                const url = userId
                     ? `${SERVER_URL}/api/tournament-results?userId=${encodeURIComponent(userId)}`
                     : `${SERVER_URL}/api/tournament-results`;
-                
+
                 const res = await fetch(url);
                 const data = await res.json();
 
@@ -682,7 +682,7 @@
             if (!display) return;
 
             const { winners, targetTime, userRank } = data;
-            
+
             // Format target time
             let targetTimeStr = 'N/A';
             if (targetTime) {
@@ -700,7 +700,7 @@
                     const seconds = Math.floor(winner.score / 1000);
                     const milliseconds = Math.floor(winner.score % 1000);
                     const timeStr = `${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
-                    
+
                     // Calculate difference from target
                     let diffStr = 'N/A';
                     if (targetTime) {
@@ -739,7 +739,7 @@
                     const userDiff = Math.abs(userRank.score - targetTime);
                     userDiffStr = `${userDiff}ms`;
                 }
-                
+
                 userRankHtml = `
                     <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
                         <div style="font-size: 0.8rem; color: #60a5fa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Your Rank</div>
@@ -849,7 +849,7 @@
                 // Check if it's a daily tournament
                 const isDaily = scheduled.type === 'daily';
                 const tournamentLabel = isDaily ? '📆 Daily Tournament' : '📅 Next Tournament';
-                const timeDisplay = hours > 0 
+                const timeDisplay = hours > 0
                     ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
                     : `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
@@ -857,8 +857,8 @@
                 if (isDaily) {
                     const scheduledDate = new Date(scheduled.scheduledTime);
                     const isToday = scheduledDate.toDateString() === new Date().toDateString();
-                    timeInfo = isToday 
-                        ? `Today at ${scheduled.time}` 
+                    timeInfo = isToday
+                        ? `Today at ${scheduled.time}`
                         : `Tomorrow at ${scheduled.time}`;
                 } else {
                     timeInfo = new Date(scheduled.scheduledTime).toLocaleString();
@@ -1153,6 +1153,8 @@
 
             addTrys(amount) {
                 this.trys += amount;
+                // CAP health at 20 max to prevent stacking
+                if (this.trys > 20) this.trys = 20;
                 localStorage.setItem('user_trys', this.trys);
                 // Clear Regen
                 localStorage.removeItem('regen_start');
