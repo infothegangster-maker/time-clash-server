@@ -630,8 +630,12 @@
             if (tournamentInterval) clearInterval(tournamentInterval);
             stopScheduledCountdown();
 
-            const display = document.getElementById('countdown');
+            // USE FULL CARD CONTENT TARGET
+            const display = document.getElementById('tournament-card-content');
             if (!display) return;
+
+            // Enable interaction
+            display.style.pointerEvents = 'auto';
 
             // If no time left, go to no tournament
             if (!msLeft || msLeft <= 0) {
@@ -646,10 +650,18 @@
             window.leaderboardTimeLeft = msLeft;
 
             const updateDisplay = () => {
+                const m = Math.floor(secondsRemaining / 60);
+                const s = secondsRemaining % 60;
+
                 if (secondsRemaining <= 0) {
                     // Leaderboard time over - reload to check for next tournament
                     display.innerHTML = `
-                        <div style="text-align: center; padding: 20px;">
+                         <!-- BACK BUTTON -->
+                        <button class="back-btn" onclick="window.location.href='home.html'"
+                            style="position: absolute; top: 15px; left: 15px; z-index: 100; pointer-events: auto;">←
+                            HOME</button>
+
+                        <div style="height: 100%; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                             <div style="font-size: 1.2rem; color: #60a5fa;">⏳ Loading Next Tournament...</div>
                         </div>
                     `;
@@ -657,22 +669,40 @@
                     return;
                 }
 
-                const m = Math.floor(secondsRemaining / 60);
-                const s = secondsRemaining % 60;
-
                 // Update countdown in results display if results loaded
                 window.leaderboardTimeLeft = secondsRemaining * 1000;
+
                 if (window.tournamentResults) {
                     displayTournamentResults(window.tournamentResults);
                 } else {
+                    // FULL SCREEN FALLBACK (Waiting for Results)
+                    // This hides the "Daily Tournament" header immediately
                     display.innerHTML = `
-                        <div style="text-align: center; padding: 20px;">
-                            <div style="font-size: 1.5rem; color: #fbbf24; margin-bottom: 10px;">🏆 Tournament Ended</div>
-                            <div style="font-size: 2rem; color: #FFD700; font-weight: 700; font-family: 'Teko', sans-serif;">
+                        <!-- BACK BUTTON -->
+                        <button class="back-btn" onclick="window.location.href='home.html'"
+                            style="position: absolute; top: 15px; left: 15px; z-index: 100; pointer-events: auto;">←
+                            HOME</button>
+
+                        <div style="height: 100%; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding-top: 50px;">
+                            <div style="font-size: 1.5rem; color: #fbbf24; margin-bottom: 20px; text-align: center;">🏆 Tournament Ended</div>
+                            <div style="
+                                font-size: 4rem; 
+                                color: #FFD700; 
+                                font-weight: 700; 
+                                font-family: 'Teko', sans-serif;
+                                line-height: 1;
+                                margin-bottom: 10px;
+                            ">
                                 ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}
                             </div>
-                            <div style="font-size: 0.85rem; color: #94a3b8; margin-top: 5px;">Next round starts in</div>
+                            <div style="font-size: 1rem; color: #94a3b8; font-family: 'Roboto Mono', monospace;">CALCULATING RESULTS...</div>
+                            <div style="margin-top: 20px;">
+                                <div style="width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #FFD700; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                            </div>
                         </div>
+                        <style>
+                            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                        </style>
                     `;
                 }
 
