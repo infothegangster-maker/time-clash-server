@@ -772,11 +772,11 @@
                     <div id="unified-view" style="width: 100%;">
                         <div class="comparison-row">
                             <span class="comp-label">TARGET</span>
-                            <span class="comp-value target-val" id="display-target">--.---</span>
+                            <span class="comp-value target-val" id="display-target">--.----</span>
                         </div>
                         <div class="comparison-row">
                             <span class="comp-label">YOU</span>
-                            <span class="comp-value" id="display-timer">00.000</span>
+                            <span class="comp-value" id="display-timer">00.0000</span>
                         </div>
                     </div>
 
@@ -1046,7 +1046,7 @@
                 });
 
                 socket.on('grd', (data) => {
-                    Hacking.target = data.t / 1000;
+                    Hacking.target = data.t / 10000;
                     const tStr = Game.formatTime(data.t);
                     Hacking.elements.displayTarget.innerText = tStr.replace(':', '.');
 
@@ -1054,7 +1054,7 @@
                     const b = data.b === -1 ? 'NA' : data.b;
 
                     document.getElementById('rank-display').innerText = `RANK: #${r}`;
-                    document.getElementById('best-display').innerText = `BEST: ${b}${b !== 'NA' ? 'ms' : ''}`;
+                    document.getElementById('best-display').innerText = `BEST: ${b !== 'NA' ? (b / 10).toFixed(1) + 'ms' : 'NA'}`;
 
                     // START TOURNAMENT TIMER - Only if time left > 0 (not in leaderboard time)
                     if (data.tl && data.tl > 0) {
@@ -1073,11 +1073,11 @@
                     Hacking.readyToPlay();
                 });
 
-                socket.on('t', (ms) => {
+                socket.on('t', (val) => {
                     if (Hacking.state === 'RUNNING' || Hacking.state === 'STOPPING') {
-                        const seconds = Math.floor(ms / 1000);
-                        const milliseconds = Math.floor(ms % 1000);
-                        const timeStr = `${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+                        const seconds = Math.floor(val / 10000);
+                        const frac = Math.floor(val % 10000);
+                        const timeStr = `${String(seconds).padStart(2, '0')}.${String(frac).padStart(4, '0')}`;
                         Hacking.elements.displayTimer.innerText = timeStr;
                     }
                 });
@@ -1092,7 +1092,7 @@
                         Hacking.elements.btn.className = "btn start";
                         Hacking.elements.btn.disabled = false;
                         Hacking.elements.status.innerText = "No health!";
-                        Hacking.elements.displayTimer.innerText = "00.000";
+                        Hacking.elements.displayTimer.innerText = "00.0000";
                         Hacking.elements.timerBox.classList.remove('timer-active');
                     }
                     TrysManager.showRefillPopup();
@@ -1123,10 +1123,10 @@
                 this.switchScreen('screen-hacking');
             },
 
-            formatTime(ms) {
-                const s = Math.floor(ms / 1000);
-                const m = Math.floor(ms % 1000);
-                return `${String(s).padStart(2, '0')}.${String(m).padStart(3, '0')}`;
+            formatTime(val) {
+                const s = Math.floor(val / 10000);
+                const f = Math.floor(val % 10000);
+                return `${String(s).padStart(2, '0')}.${String(f).padStart(4, '0')}`;
             },
 
             finishLevel(success, message) {
@@ -1301,7 +1301,7 @@
             },
 
             resetView() {
-                this.elements.displayTimer.innerHTML = "00.000";
+                this.elements.displayTimer.innerHTML = "00.0000";
                 this.elements.displayTimer.style.color = "#fff";
                 this.elements.timerBox.style.borderColor = "#334155";
                 this.elements.timerBox.classList.remove('bounce-start', 'timer-active');
@@ -1374,7 +1374,7 @@
                 this.elements.displayTimer.innerText = playerTimeStr;
 
                 if (rank) document.getElementById('rank-display').innerText = `RANK: #${rank}`;
-                if (bestScore) document.getElementById('best-display').innerText = `BEST: ${bestScore}ms`;
+                if (bestScore != null && bestScore >= 0) document.getElementById('best-display').innerText = `BEST: ${(bestScore / 10).toFixed(1)}ms`;
 
                 if (isWin) {
                     this.elements.displayTimer.style.color = "#22c55e";
@@ -1387,7 +1387,7 @@
                     this.elements.displayTimer.innerHTML = Game.colorizeDigits(targetStr, playerTimeStr);
 
                     this.elements.diffBadge.style.display = "inline-block";
-                    this.elements.diffBadge.innerText = `OFF BY ${diffMs}ms`;
+                    this.elements.diffBadge.innerText = `OFF BY ${(diffMs / 10).toFixed(1)}ms`;
 
                     this.elements.timerBox.style.borderColor = "#ef4444";
                     this.elements.timerBox.classList.add('pulse');
@@ -1402,9 +1402,9 @@
                     if (newRecord) {
                         msg = `🔥 NEW HIGH SCORE! 🔥<br><b>You jumped to Rank #${rank}!</b>`;
                         this.elements.diffBadge.classList.add('new-record-anim');
-                        this.elements.diffBadge.innerText = `NEW BEST: ${diffMs}ms!`;
-                    } else if (diffMs < 10) {
-                        msg = `😱 OFF BY A WHISKER!<br><b>Just ${diffMs}ms difference!</b>`;
+                        this.elements.diffBadge.innerText = `NEW BEST: ${(diffMs / 10).toFixed(1)}ms!`;
+                    } else if (diffMs < 100) {
+                        msg = `😱 OFF BY A WHISKER!<br><b>Just ${(diffMs / 10).toFixed(1)}ms difference!</b>`;
                     } else {
                         msg = `💪 Getting closer!<br><b>Watch the last digit carefully!</b>`;
                     }
@@ -1433,7 +1433,7 @@
                 const medals = ['🥇','🥈','🥉'];
                 listEl.innerHTML = data.scores.map(p => {
                     const medal = medals[p.rank - 1] || `#${p.rank}`;
-                    const scoreStr = p.score + 'ms';
+                    const scoreStr = (p.score / 10).toFixed(1) + 'ms';
                     return `
                         <div class="ts-row ${p.isYou ? 'is-you' : ''}">
                             <div class="ts-rank">${medal}</div>

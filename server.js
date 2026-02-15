@@ -2117,12 +2117,12 @@ const io = socketIo(fastify.server, {
     }
 });
 
-// Helper: Format Time (SS:MMM)
-function formatTime(ms) {
-    if (ms < 0) ms = 0;
-    const seconds = Math.floor(ms / 1000);
-    const milliseconds = Math.floor(ms % 1000);
-    return `${String(seconds).padStart(2, '0')}:${String(milliseconds).padStart(3, '0')}`;
+// Helper: Format Time (SS:MMMM) — value in tenths of ms (0.1ms units)
+function formatTime(val) {
+    if (val < 0) val = 0;
+    const seconds = Math.floor(val / 10000);
+    const frac = Math.floor(val % 10000);
+    return `${String(seconds).padStart(2, '0')}:${String(frac).padStart(4, '0')}`;
 }
 
 // --- TOURNAMENT HELPERS ---
@@ -3178,21 +3178,21 @@ io.on('connection', (socket) => {
                 } else {
                     // Generate new target for this tournament and store it
                     // Tournament target time: 2 seconds (2000ms) to 3.5 seconds (3500ms)
-                    targetTime = Math.floor(Math.random() * 1500) + 2000;
+                    targetTime = Math.floor(Math.random() * 15000) + 20000; // tenths of ms (2.0000s - 3.4999s)
                     // Store it with tournament duration expiry (use longer expiry for custom tournaments)
                     const expirySeconds = Math.ceil(TOURNAMENT_DURATION_MS / 1000) + 60; // Add 60s buffer
                     await redis.setex(targetKey1, expirySeconds, targetTime.toString());
                     await redis.setex(targetKey2, expirySeconds, targetTime.toString()); // Store in both formats
-                    console.log(`🎯 Generated NEW target for tournament ${currentTournamentId}: ${targetTime}ms`);
+                    console.log(`🎯 Generated NEW target for tournament ${currentTournamentId}: ${targetTime} (0.1ms units)`);
                 }
             } catch (e) {
                 console.error("❌ Error getting/setting tournament target:", e);
-                // Fallback to random if Redis fails (2-3.5 seconds)
-                targetTime = Math.floor(Math.random() * 1500) + 2000;
+                // Fallback to random if Redis fails (2.0000s-3.4999s in tenths of ms)
+                targetTime = Math.floor(Math.random() * 15000) + 20000;
             }
         } else {
-            // Practice mode: random target per user (2-3.5 seconds)
-            targetTime = Math.floor(Math.random() * 1500) + 2000;
+            // Practice mode: random target per user (2.0000s-3.4999s in tenths of ms)
+            targetTime = Math.floor(Math.random() * 15000) + 20000;
         }
 
         // Fetch Best Score & Rank for CURRENT Tournament (ONLY IF TOURNAMENT MODE)
@@ -3318,19 +3318,20 @@ io.on('connection', (socket) => {
             }
         }
 
-        const startTime = Date.now();
+        const startHrtime = process.hrtime.bigint(); // nanosecond precision
+        const startTime = Date.now(); // keep for compatibility
 
         if (gameIntervals.has(socket.id)) clearInterval(gameIntervals.get(socket.id));
 
         const intervalId = setInterval(() => {
-            const now = Date.now();
-            const elapsed = now - startTime;
+            const elapsed = Number((process.hrtime.bigint() - startHrtime) / 100000n); // tenths of ms
             socket.emit('t', elapsed);
-        }, 100);
+        }, 50);
 
         gameIntervals.set(socket.id, intervalId);
 
         session.startTime = startTime;
+        session.startHrtime = startHrtime;
         session.status = 'running';
     });
 
@@ -3358,10 +3359,13 @@ io.on('connection', (socket) => {
         if (session.status !== 'running') return; // Prevent double submission
         session.status = 'finished';
 
-        const serverDuration = stopTime - session.startTime;
+        // Use hrtime for sub-ms precision (tenths of ms)
+        const serverDuration = session.startHrtime
+            ? Number((process.hrtime.bigint() - session.startHrtime) / 100000n)
+            : (stopTime - session.startTime) * 10; // fallback: convert ms to tenths
         const target = session.targetTime;
 
-        // FINAL CALCULATION
+        // FINAL CALCULATION (in tenths of ms)
         const diff = Math.abs(serverDuration - target);
         const win = diff === 0;
 
