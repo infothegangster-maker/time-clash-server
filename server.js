@@ -3326,7 +3326,7 @@ io.on('connection', (socket) => {
         const intervalId = setInterval(() => {
             const elapsed = Number((process.hrtime.bigint() - startHrtime) / 100000n); // tenths of ms
             socket.emit('t', elapsed);
-        }, 50);
+        }, 100);
 
         gameIntervals.set(socket.id, intervalId);
 
