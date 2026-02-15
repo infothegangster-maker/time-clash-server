@@ -814,7 +814,7 @@ CREATE TABLE physical_reward_orders (
     city TEXT NOT NULL,
     state TEXT NOT NULL,
     pincode TEXT NOT NULL,
-    status TEXT DEFAULT 'pending',
+    order_status TEXT DEFAULT 'pending',
     admin_notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -1020,6 +1020,130 @@ fastify.post('/api/claim-reward', async (req, reply) => {
     }
 });
 
+// =============================================
+// SERVER-SIDE HEALTH SYSTEM (Anti-Cheat)
+// Health stored in Redis — client syncs from server
+// =============================================
+const HEALTH_MAX = 20;
+const HEALTH_REFILL_MS = 5 * 60 * 1000; // 5 minutes
+
+// GET current health + regen info
+fastify.get('/api/health', async (req, reply) => {
+    try {
+        const { userId } = req.query;
+        if (!userId) return { error: 'userId required' };
+
+        const health = parseInt(await redis.get(`health:${userId}`)) || 0;
+        const regenStart = await redis.get(`health_regen:${userId}`);
+        let regenRemaining = null;
+
+        if (health <= 0 && regenStart) {
+            const elapsed = Date.now() - parseInt(regenStart);
+            if (elapsed >= HEALTH_REFILL_MS) {
+                // Refill ready — grant health
+                await redis.set(`health:${userId}`, HEALTH_MAX);
+                await redis.del(`health_regen:${userId}`);
+                return { health: HEALTH_MAX, regenRemaining: null };
+            } else {
+                regenRemaining = HEALTH_REFILL_MS - elapsed;
+            }
+        } else if (health <= 0 && !regenStart) {
+            // Start regen timer
+            await redis.set(`health_regen:${userId}`, Date.now());
+            regenRemaining = HEALTH_REFILL_MS;
+        }
+
+        return { health: Math.max(0, health), regenRemaining };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// POST: Tournament entry — reset health to 20
+fastify.post('/api/health/tournament-entry', async (req, reply) => {
+    try {
+        const { userId } = req.body;
+        if (!userId) return { error: 'userId required' };
+
+        await redis.set(`health:${userId}`, HEALTH_MAX);
+        await redis.del(`health_regen:${userId}`);
+        console.log(`❤️ [HEALTH] Tournament entry: ${userId} → ${HEALTH_MAX} HP`);
+        return { success: true, health: HEALTH_MAX };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// POST: Ad reward — +20 health
+fastify.post('/api/health/ad-reward', async (req, reply) => {
+    try {
+        const { userId } = req.body;
+        if (!userId) return { error: 'userId required' };
+
+        await redis.set(`health:${userId}`, HEALTH_MAX);
+        await redis.del(`health_regen:${userId}`);
+        console.log(`❤️ [HEALTH] Ad reward: ${userId} → ${HEALTH_MAX} HP`);
+        return { success: true, health: HEALTH_MAX };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// POST: Refill (5-min timer validated on server)
+fastify.post('/api/health/refill', async (req, reply) => {
+    try {
+        const { userId } = req.body;
+        if (!userId) return { error: 'userId required' };
+
+        const currentHealth = parseInt(await redis.get(`health:${userId}`)) || 0;
+        if (currentHealth > 0) return { success: false, health: currentHealth, message: 'Health not empty' };
+
+        const regenStart = await redis.get(`health_regen:${userId}`);
+        if (!regenStart) return { success: false, health: 0, message: 'No refill timer active' };
+
+        const elapsed = Date.now() - parseInt(regenStart);
+        if (elapsed < HEALTH_REFILL_MS) {
+            return { success: false, health: 0, remaining: HEALTH_REFILL_MS - elapsed, message: 'Refill not ready' };
+        }
+
+        // Refill!
+        await redis.set(`health:${userId}`, HEALTH_MAX);
+        await redis.del(`health_regen:${userId}`);
+        console.log(`❤️ [HEALTH] Refill complete: ${userId} → ${HEALTH_MAX} HP`);
+        return { success: true, health: HEALTH_MAX };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// POST: Consume 1 health (called by game on each round start)
+fastify.post('/api/health/consume', async (req, reply) => {
+    try {
+        const { userId } = req.body;
+        if (!userId) return { error: 'userId required' };
+
+        const current = parseInt(await redis.get(`health:${userId}`)) || 0;
+        if (current <= 0) {
+            // Start regen if not already
+            const existing = await redis.get(`health_regen:${userId}`);
+            if (!existing) await redis.set(`health_regen:${userId}`, Date.now());
+            return { success: false, health: 0, message: 'No health remaining' };
+        }
+
+        const newHealth = current - 1;
+        await redis.set(`health:${userId}`, newHealth);
+
+        // If health just hit 0, start regen timer
+        if (newHealth <= 0) {
+            await redis.set(`health_regen:${userId}`, Date.now());
+        }
+
+        return { success: true, health: newHealth };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
 // Save redeem codes for a reward config (admin)
 fastify.post('/api/admin/redeem-codes', async (req, reply) => {
     try {
@@ -1095,7 +1219,7 @@ fastify.post('/api/admin/physical-orders/:orderId/status', async (req, reply) =>
         const { status, admin_notes } = req.body;
         const { data, error } = await supabase
             .from('physical_reward_orders')
-            .update({ status, admin_notes })
+            .update({ order_status: status, admin_notes })
             .eq('id', req.params.orderId)
             .select();
         if (error) return { error: error.message };
@@ -1502,8 +1626,11 @@ fastify.get('/api/tournament-results', async (req, reply) => {
             targetTime = await redis.get(targetKey2);
         }
 
-        // Get top 3 winners
-        const top3 = await redis.zrange(currentTournamentKey, 0, 2, 'WITHSCORES');
+        // Get total player count
+        const totalPlayers = await redis.zcard(currentTournamentKey) || 0;
+
+        // Get ALL players (up to 50 for leaderboard)
+        const top3 = await redis.zrange(currentTournamentKey, 0, 49, 'WITHSCORES');
         const winners = [];
 
         if (Array.isArray(top3)) {
@@ -1573,7 +1700,8 @@ fastify.get('/api/tournament-results', async (req, reply) => {
             tournamentId: currentTournamentKey,
             targetTime: targetTime ? parseInt(targetTime) : null,
             winners: winners,
-            userRank: userRank
+            userRank: userRank,
+            totalPlayers: totalPlayers
         };
     } catch (e) {
         console.error("Error in /api/tournament-results:", e);
@@ -1638,6 +1766,57 @@ fastify.get('/api/admin/tournament-history', async (req, reply) => {
         console.error("❌ Error fetching tournament history:", e);
         return { error: e.message, history: [] };
     }
+});
+
+// Admin: Search tournaments by date range (from Supabase)
+fastify.get('/api/admin/search-tournaments', async (req, reply) => {
+    try {
+        if (!supabase) return { error: 'Supabase not configured', tournaments: [] };
+        const { from, to, limit: lim } = req.query;
+        let query = supabase.from('tournaments').select('*').order('started_at', { ascending: false }).limit(parseInt(lim) || 50);
+        if (from) query = query.gte('started_at', new Date(from).toISOString());
+        if (to) query = query.lte('started_at', new Date(to + 'T23:59:59').toISOString());
+        const { data, error } = await query;
+        if (error) return { error: error.message, tournaments: [] };
+        return { tournaments: data || [] };
+    } catch (e) { return { error: e.message, tournaments: [] }; }
+});
+
+// Admin: Search player history by email or userId (from Supabase)
+fastify.get('/api/admin/search-player', async (req, reply) => {
+    try {
+        if (!supabase) return { error: 'Supabase not configured', results: [] };
+        const { email, userId } = req.query;
+        if (!email && !userId) return { error: 'Provide email or userId', results: [] };
+
+        let query = supabase.from('tournament_results').select('*').order('created_at', { ascending: false }).limit(100);
+        if (email) query = query.eq('email', email);
+        else if (userId) query = query.eq('user_id', userId);
+        const { data, error } = await query;
+        if (error) return { error: error.message, results: [] };
+
+        // Also get rewards for this player
+        let rewards = [];
+        if (data && data.length > 0) {
+            const uid = data[0].user_id;
+            const { data: rData } = await supabase.from('user_rewards').select('*').eq('user_id', uid).order('created_at', { ascending: false });
+            if (rData) rewards = rData;
+        }
+
+        return { results: data || [], rewards };
+    } catch (e) { return { error: e.message, results: [] }; }
+});
+
+// Admin: Get tournament details by ID (from Supabase)
+fastify.get('/api/admin/tournament-detail/:tournamentId', async (req, reply) => {
+    try {
+        if (!supabase) return { error: 'Supabase not configured' };
+        const tid = req.params.tournamentId;
+        const { data: meta } = await supabase.from('tournaments').select('*').eq('id', tid).single();
+        const { data: results } = await supabase.from('tournament_results').select('*').eq('tournament_id', tid).order('rank_position');
+        const { data: rewards } = await supabase.from('user_rewards').select('*').eq('tournament_id', tid).order('rank_achieved');
+        return { tournament: meta || null, results: results || [], rewards: rewards || [] };
+    } catch (e) { return { error: e.message }; }
 });
 
 // --- START SERVER FIRST ---
@@ -2217,6 +2396,41 @@ function startTournamentCheck() {
                         if (!supabase) console.log(`⚠️ [REWARDS] Supabase not configured - cannot save rewards`);
                     }
 
+                    // Save ALL results to Supabase tournament_results table
+                    if (supabase && allWinners.length > 0) {
+                        try {
+                            const tgtTime = await redis.get(`${currentTournamentKey}_target`) || await redis.get(`tournament:${currentTournamentKey}:target`);
+                            const resultInserts = allWinners.map((w, idx) => ({
+                                tournament_id: currentTournamentKey,
+                                user_id: w.u,
+                                username: w.n || null,
+                                email: w.e || null,
+                                score: parseFloat(w.s) || 0,
+                                rank_position: idx + 1,
+                                target_time: tgtTime ? parseFloat(tgtTime) : null,
+                                actual_time: tgtTime ? parseFloat(tgtTime) + (parseFloat(w.s) || 0) : null,
+                                diff: parseFloat(w.s) || 0
+                            }));
+                            await supabase.from('tournament_results').insert(resultInserts);
+                            console.log(`📊 [P→L] Saved ${resultInserts.length} player results to Supabase`);
+                        } catch (e) { console.error('❌ tournament_results insert error:', e.message); }
+
+                        // Save tournament metadata
+                        try {
+                            const info = await redis.hgetall(`tournament:info:${currentTournamentKey}`);
+                            await supabase.from('tournaments').upsert({
+                                id: currentTournamentKey,
+                                schedule_id: info?.schedule_id || null,
+                                started_at: info?.startTime ? new Date(parseInt(info.startTime)).toISOString() : new Date().toISOString(),
+                                player_count: allWinners.length,
+                                tournament_status: 'leaderboard',
+                                play_time_ms: info?.playTime ? parseInt(info.playTime) : null,
+                                leaderboard_time_ms: info?.leaderboardTime ? parseInt(info.leaderboardTime) : null
+                            });
+                            console.log(`📊 [P→L] Tournament metadata saved to Supabase`);
+                        } catch (e) { console.error('❌ tournaments upsert error:', e.message); }
+                    }
+
                     // Use top 3 for archive
                     const winners = allWinners.slice(0, 3);
 
@@ -2375,6 +2589,15 @@ async function endTournament(oldKey) {
             });
         } else {
             console.log(`🗄️ [SUPABASE] Already archived at play time end, skipping: ${oldKey}`);
+        }
+
+        // 5. Mark tournament as 'ended' in Supabase
+        if (supabase) {
+            try {
+                await supabase.from('tournaments')
+                    .update({ tournament_status: 'ended', ended_at: new Date().toISOString() })
+                    .eq('id', oldKey);
+            } catch (e) { /* ignore if table doesn't exist yet */ }
         }
 
     } catch (e) {
@@ -2767,6 +2990,26 @@ io.on('connection', (socket) => {
         if (!checkRateLimit(socket, 'st')) return;
         const session = sessionStore.get(socket.id);
         if (!session) return;
+
+        // SERVER-SIDE HEALTH CHECK (anti-cheat) — tournament mode only
+        if (session.mode === 't' && session.userId) {
+            try {
+                const currentHealth = parseInt(await redis.get(`health:${session.userId}`)) || 0;
+                if (currentHealth <= 0) {
+                    socket.emit('no_health', { health: 0 });
+                    return; // Block round start
+                }
+                // Deduct 1 health
+                const newHealth = currentHealth - 1;
+                await redis.set(`health:${session.userId}`, newHealth);
+                if (newHealth <= 0) {
+                    await redis.set(`health_regen:${session.userId}`, Date.now());
+                }
+                socket.emit('health_update', { health: newHealth });
+            } catch (e) {
+                console.error('❌ Health check error:', e.message);
+            }
+        }
 
         const startTime = Date.now();
 

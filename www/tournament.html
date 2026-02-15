@@ -516,6 +516,11 @@
 
         // Helper to restore Lobby UI
         function restoreLobbyUI() {
+            // Clear stale leaderboard data
+            window.tournamentResults = null;
+            window.isInLeaderboardPhase = false;
+            if (tournamentInterval) { clearInterval(tournamentInterval); tournamentInterval = null; }
+
             if (!document.getElementById('action-area') && initialCardHTML) {
                 console.log("Restoring Lobby UI...");
                 const display = document.getElementById('tournament-card-content');
@@ -664,7 +669,7 @@
                 const myWin = data.winners.find(w => w.u === userId);
                 if (myWin) {
                     console.log(`🎉 YOU WON! Rank #${myWin.rank}`, myWin.reward);
-                    // Delay slightly to let leaderboard phase kick in + rewards distribute to Supabase
+                    // Show overlay almost instantly - rewards are distributed during p→l transition
                     setTimeout(() => {
                         showWinnerOverlay({
                             rank_achieved: myWin.rank,
@@ -673,7 +678,7 @@
                             id: null,
                             tournament_id: data.tid
                         });
-                    }, 1200);
+                    }, 300);
                 }
             });
         }
@@ -699,12 +704,26 @@
 
             const updateDisplay = () => {
                 if (secondsRemaining <= 0) {
-                    // Play time ended - check if there's a scheduled tournament
-                    if (nextScheduledTournament) {
-                        startScheduledCountdown(nextScheduledTournament);
-                    } else {
-                        showNoTournamentMessage();
+                    // Play time ended - server will transition to leaderboard phase
+                    // Don't show "No Tournament" - wait for server's 'tu' socket event
+                    if (tournamentInterval) { clearInterval(tournamentInterval); tournamentInterval = null; }
+                    const cd = document.getElementById('countdown');
+                    if (cd) {
+                        cd.innerHTML = `
+                            <div style="text-align:center; padding:20px; width:100%;">
+                                <div style="display:inline-block; width:28px; height:28px; border:3px solid rgba(255,255,255,0.1); border-top-color:#FFD700; border-radius:50%; animation:spin 0.8s linear infinite; margin-bottom:8px;"></div>
+                                <div style="font-size:0.95rem; color:#fbbf24; font-weight:600;">Tournament Ending...</div>
+                            </div>`;
                     }
+                    // Safety: if no server event within 8s, re-emit ig
+                    setTimeout(() => {
+                        if (!window.isInLeaderboardPhase && socket && socket.connected) {
+                            const _uid = localStorage.getItem('tc_user_id');
+                            const _email = localStorage.getItem('tc_email');
+                            const _uname = localStorage.getItem('tc_username');
+                            socket.emit('ig', { u: _uid, e: _email, n: _uname, t: '', m: 't' });
+                        }
+                    }, 8000);
                     return;
                 }
 
@@ -832,18 +851,28 @@
                 const s = secondsRemaining % 60;
 
                 if (secondsRemaining <= 0) {
-                    // Leaderboard time over - reload to check for next tournament
+                    // Leaderboard time over - re-emit ig for fresh data instead of full page reload
+                    window.isInLeaderboardPhase = false;
                     display.innerHTML = `
-                         <!-- BACK BUTTON -->
                         <button class="back-btn" onclick="window.location.href='home.html'"
-                            style="position: absolute; top: 15px; left: 15px; z-index: 100; pointer-events: auto;">←
-                            HOME</button>
-
-                        <div style="height: 100%; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                            <div style="font-size: 1.2rem; color: #60a5fa;">⏳ Loading Next Tournament...</div>
+                            style="position: absolute; top: 15px; left: 15px; z-index: 100; pointer-events: auto;">← HOME</button>
+                        <div style="height:100%; width:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:12px;">
+                            <div style="width:36px; height:36px; border:3px solid rgba(255,255,255,0.1); border-top-color:#FFD700; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+                            <div style="font-size:1rem; color:#FFD700; font-weight:600;">Loading Next Tournament...</div>
                         </div>
                     `;
-                    setTimeout(() => window.location.reload(), 2000);
+                    const _refreshAfterLeaderboard = () => {
+                        if (socket && socket.connected) {
+                            const _uid = localStorage.getItem('tc_user_id');
+                            const _email = localStorage.getItem('tc_email');
+                            const _uname = localStorage.getItem('tc_username');
+                            socket.emit('ig', { u: _uid, e: _email, n: _uname, t: '', m: 't' });
+                        } else {
+                            window.location.reload();
+                        }
+                    };
+                    setTimeout(_refreshAfterLeaderboard, 1500);
+                    setTimeout(() => { if (!hasActiveTournament) _refreshAfterLeaderboard(); }, 5000);
                     return;
                 }
 
@@ -917,221 +946,175 @@
             }
         }
 
-        // Display tournament results in leaderboard - REDESIGNED FULL SCREEN TAKEOVER
+        // Display tournament results in leaderboard - GAME-LIKE FULL SCREEN UI
         async function displayTournamentResults(data) {
             const display = document.getElementById('tournament-card-content');
             if (!display) return;
-
-            // Enable pointer events for interaction
             display.style.pointerEvents = 'auto';
 
-            const { winners, targetTime, userRank } = data;
+            const { winners, targetTime, userRank, totalPlayers } = data;
+            const userId = localStorage.getItem('tc_user_id');
+            const rewardsPool = window.activeRewards || window.upcomingRewards || [];
 
             // Format target time
             let targetTimeStr = 'N/A';
             if (targetTime) {
-                const seconds = Math.floor(targetTime / 1000);
-                const milliseconds = Math.floor(targetTime % 1000);
-                targetTimeStr = `${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+                const sec = Math.floor(targetTime / 1000);
+                const ms = Math.floor(targetTime % 1000);
+                targetTimeStr = `${String(sec).padStart(2, '0')}.${String(ms).padStart(3, '0')}s`;
             }
 
-            // Format winners list
-            let winnersHtml = '';
-            if (winners && winners.length > 0) {
-                winners.forEach((winner, index) => {
-                    const rank = index + 1;
-                    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
+            // Helper: format time
+            const fmtTime = (val) => {
+                const sec = Math.floor(val / 1000);
+                const ms = Math.floor(val % 1000);
+                return `${String(sec).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+            };
 
-                    // Winner Time (Use Actual Time passed from server, fallback to score/target logic if missing)
-                    const timeVal = winner.actualTime || (targetTime ? targetTime + winner.score : winner.score);
-                    const wSeconds = Math.floor(timeVal / 1000);
-                    const wMilliseconds = Math.floor(timeVal % 1000);
-                    const timeStr = `${String(wSeconds).padStart(2, '0')}.${String(wMilliseconds).padStart(3, '0')}`;
+            // Determine if user is a winner (has reward)
+            const isUserWinner = userRank && rewardsPool.some(r => userRank.rank >= parseInt(r.min) && userRank.rank <= parseInt(r.max));
 
-                    // Diff Calculation (Score IS the difference)
-                    const diffVal = winner.score;
-                    const diffStr = `+${diffVal}ms`;
+            // === YOUR RANK HERO BANNER ===
+            let yourRankBanner = '';
+            if (userRank && userRank.rank) {
+                const uTime = fmtTime(userRank.actualTime || (targetTime ? targetTime + userRank.score : userRank.score));
+                const rankOrdinal = userRank.rank === 1 ? '1st' : userRank.rank === 2 ? '2nd' : userRank.rank === 3 ? '3rd' : userRank.rank + 'th';
+                const bannerGrad = isUserWinner
+                    ? 'linear-gradient(135deg,rgba(255,215,0,0.18),rgba(245,158,11,0.08))'
+                    : 'linear-gradient(135deg,rgba(59,130,246,0.15),rgba(99,102,241,0.08))';
+                const bannerBorder = isUserWinner ? 'rgba(255,215,0,0.4)' : 'rgba(59,130,246,0.3)';
+                const rankColor = isUserWinner ? '#FFD700' : '#60a5fa';
+                const statusText = isUserWinner ? '🏆 WINNER!' : '⚔️ GOOD FIGHT!';
+                const statusColor = isUserWinner ? '#FFD700' : '#94a3b8';
 
-                    // Name truncation
-                    let name = winner.username || winner.userId.substring(0, 8);
-                    if (name.length > 12) name = name.substring(0, 10) + '...';
-
-                    // Check for Reward
-                    let rewardIcon = '';
-                    // Use activeRewards (from grd) or upcomingRewards (from scheduled)
-                    const rewardsPool = window.activeRewards || window.upcomingRewards;
-                    if (rewardsPool) {
-                        const reward = rewardsPool.find(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
-                        if (reward) {
-                            rewardIcon = `<span title="${reward.name}" style="margin-left: 6px; display: inline-flex; align-items: center; vertical-align: middle;">${reward.img.startsWith('http') ? `<img src="${reward.img}" style="width:28px;height:28px;border-radius:8px;object-fit:cover;border:1.5px solid rgba(139,92,246,0.4);box-shadow:0 0 8px rgba(139,92,246,0.3);vertical-align:middle;">` : '<span style="font-size:1.4rem;">🎁</span>'}</span>`;
-                        }
-                    }
-
-                    winnersHtml += `
-                        <div style="
-                            display: flex; 
-                            align-items: center; 
-                            padding: 12px 15px; 
-                            margin-bottom: 8px; 
-                            background: rgba(255,255,255,0.03); 
-                            border-radius: 12px; 
-                            border: 1px solid rgba(255,255,255,0.05);
-                        ">
-                            <!-- Rank & Medal -->
-                            <div style="width: 40px; font-size: 1.2rem; text-align: center;">${medal}</div>
-                            
-                            <!-- Name -->
-                            <div style="flex: 1; padding-left: 10px;">
-                                <div style="font-weight: 600; color: #fff; font-size: 1rem; display: flex; align-items: center;">
-                                    ${name}
-                                    ${rewardIcon}
-                                </div>
-                                <div style="font-size: 0.75rem; color: #64748b;">Rank #${rank}</div>
-                            </div>
-                            
-                            <!-- Stats (Right Aligned) -->
-                            <div style="text-align: right;">
-                                <div style="font-family: 'Roboto Mono', monospace; font-size: 1rem; color: #FFD700; font-weight: 700;">${timeStr}</div>
-                                <div style="font-size: 0.8rem; color: #ef4444; font-weight: 500;">${diffStr}</div>
-                            </div>
+                yourRankBanner = `
+                    <div style="background:${bannerGrad}; border:1.5px solid ${bannerBorder}; border-radius:14px; padding:12px 16px; text-align:center; animation:fadeInUp 0.5s ease-out; position:relative; overflow:hidden;">
+                        ${isUserWinner ? '<div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.06),transparent);animation:shineSlide 3s infinite;"></div>' : ''}
+                        <div style="font-size:0.7rem; color:${statusColor}; font-weight:700; letter-spacing:2px; text-transform:uppercase;">${statusText}</div>
+                        <div style="font-family:'Teko',sans-serif; font-size:2.8rem; color:${rankColor}; font-weight:800; line-height:1; margin:2px 0; text-shadow:0 0 15px ${rankColor}44;">${rankOrdinal}</div>
+                        <div style="display:flex; justify-content:center; gap:16px; margin-top:4px;">
+                            <span style="font-size:0.7rem; color:#94a3b8;">Time: <strong style="color:#fff;">${uTime}s</strong></span>
+                            <span style="font-size:0.7rem; color:#94a3b8;">Diff: <strong style="color:#ef4444;">+${userRank.score}ms</strong></span>
+                            ${totalPlayers ? `<span style="font-size:0.7rem; color:#94a3b8;">of <strong style="color:#a78bfa;">${totalPlayers}</strong> players</span>` : ''}
                         </div>
-                    `;
+                    </div>`;
+            }
+
+            // === LEADERBOARD ROWS ===
+            let boardHtml = '';
+            if (winners && winners.length > 0) {
+                // Show max 10 entries in leaderboard
+                const showWinners = winners.slice(0, 10);
+                showWinners.forEach((w, index) => {
+                    const rank = index + 1;
+                    const timeVal = w.actualTime || (targetTime ? targetTime + w.score : w.score);
+                    const timeStr = fmtTime(timeVal);
+                    const diffStr = `+${w.score}ms`;
+                    let name = w.username || w.userId.substring(0, 8);
+                    if (name.length > 11) name = name.substring(0, 9) + '..';
+                    const isMe = w.userId === userId;
+
+                    // Rank badge styles
+                    const rankStyles = {
+                        1: { bg: 'linear-gradient(135deg,#FFD700,#F59E0B)', text: '#000', medal: '🥇', rowBg: 'rgba(255,215,0,0.08)', border: 'rgba(255,215,0,0.25)' },
+                        2: { bg: 'linear-gradient(135deg,#C0C0C0,#8a9bae)', text: '#000', medal: '🥈', rowBg: 'rgba(192,192,192,0.06)', border: 'rgba(192,192,192,0.18)' },
+                        3: { bg: 'linear-gradient(135deg,#cd7f32,#a0522d)', text: '#fff', medal: '🥉', rowBg: 'rgba(205,127,50,0.06)', border: 'rgba(205,127,50,0.18)' }
+                    };
+                    const rs = rankStyles[rank] || { bg: 'linear-gradient(135deg,#334155,#475569)', text: '#fff', medal: '', rowBg: 'rgba(255,255,255,0.02)', border: 'rgba(255,255,255,0.05)' };
+
+                    // Check for reward
+                    const hasReward = rewardsPool.some(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
+
+                    // Highlight if this is the current user
+                    const meHighlight = isMe ? 'border:1.5px solid rgba(59,130,246,0.5); background:rgba(59,130,246,0.1) !important;' : '';
+                    const meBadge = isMe ? `<span style="font-size:0.55rem; background:linear-gradient(135deg,#3b82f6,#6366f1); color:#fff; padding:1px 6px; border-radius:8px; font-weight:700; margin-left:4px; letter-spacing:0.5px;">YOU</span>` : '';
+                    const winnerBadge = hasReward && !isMe ? `<span style="font-size:0.55rem; background:linear-gradient(135deg,#f59e0b,#d97706); color:#000; padding:1px 5px; border-radius:8px; font-weight:700; margin-left:4px;">🏆</span>` : '';
+
+                    boardHtml += `
+                        <div style="
+                            display:flex; align-items:center; padding:8px 10px; margin-bottom:4px;
+                            background:${rs.rowBg}; border-radius:10px; border:1px solid ${rs.border};
+                            ${meHighlight}
+                            animation:fadeInUp ${0.2 + index * 0.08}s ease-out both;
+                        ">
+                            <div style="width:28px; height:28px; border-radius:50%; background:${rs.bg}; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:0.7rem; font-weight:800; color:${rs.text}; box-shadow:0 2px 6px rgba(0,0,0,0.3);">
+                                ${rs.medal || '#' + rank}
+                            </div>
+                            <div style="flex:1; padding-left:8px; min-width:0;">
+                                <div style="font-weight:600; color:#fff; font-size:0.85rem; display:flex; align-items:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                    ${name}${meBadge}${winnerBadge}
+                                </div>
+                            </div>
+                            <div style="text-align:right; flex-shrink:0; padding-left:6px;">
+                                <div style="font-family:'Roboto Mono',monospace; font-size:0.8rem; color:${rank <= 3 ? '#FFD700' : '#e2e8f0'}; font-weight:700;">${timeStr}s</div>
+                                <div style="font-size:0.65rem; color:#ef4444; font-weight:600;">${diffStr}</div>
+                            </div>
+                        </div>`;
                 });
             } else {
-                winnersHtml = `
-                    <div style="text-align: center; color: #94a3b8; padding: 40px 20px;">
-                        <div style="font-size: 2rem; margin-bottom: 10px;">📉</div>
-                        No winners yet for this round!
-                    </div>
-                `;
+                boardHtml = `<div style="text-align:center; color:#94a3b8; padding:30px 20px; font-size:0.9rem;">📉 No results yet</div>`;
             }
 
-            // User Rank Section (Sticky at bottom if needed, but here inline)
-            let userRankHtml = '';
-            if (userRank && userRank.rank) {
-                const uTimeVal = userRank.actualTime || (targetTime ? targetTime + userRank.score : userRank.score);
-                const uSeconds = Math.floor(uTimeVal / 1000);
-                const uMilliseconds = Math.floor(uTimeVal % 1000);
-                const uTimeStr = `${String(uSeconds).padStart(2, '0')}.${String(uMilliseconds).padStart(3, '0')}`;
-
-                const uDiffVal = userRank.score;
-                const uDiffStr = `+${uDiffVal}ms`;
-
-                userRankHtml = `
-                    <div style="
-                        margin-top: 20px; 
-                        padding: 15px; 
-                        background: rgba(59, 130, 246, 0.15); 
-                        border-radius: 15px; 
-                        border: 1px solid rgba(59, 130, 246, 0.4);
-                        display: flex;
-                        align-items: center;
-                    ">
-                        <div style="width: 40px; font-size: 1.2rem; text-align: center;">👤</div>
-                        <div style="flex: 1; padding-left: 10px;">
-                            <div style="font-weight: 700; color: #60a5fa; font-size: 1rem;">YOU</div>
-                            <div style="font-size: 0.75rem; color: #93c5fd;">Rank #${userRank.rank}</div>
+            // === USER RANK ROW (if user is NOT in top 10 already) ===
+            let userSeparateRow = '';
+            if (userRank && userRank.rank && userRank.rank > 10) {
+                const uTime = fmtTime(userRank.actualTime || (targetTime ? targetTime + userRank.score : userRank.score));
+                userSeparateRow = `
+                    <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.1);">
+                        <div style="display:flex; align-items:center; padding:8px 10px; background:rgba(59,130,246,0.1); border-radius:10px; border:1.5px solid rgba(59,130,246,0.4);">
+                            <div style="width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#3b82f6,#6366f1); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:0.65rem; font-weight:800; color:#fff;">#${userRank.rank}</div>
+                            <div style="flex:1; padding-left:8px;">
+                                <div style="font-weight:700; color:#60a5fa; font-size:0.85rem;">YOU <span style="font-size:0.55rem; background:rgba(59,130,246,0.3); padding:1px 6px; border-radius:8px; color:#93c5fd; margin-left:4px;">RANK #${userRank.rank}</span></div>
+                            </div>
+                            <div style="text-align:right; flex-shrink:0;">
+                                <div style="font-family:'Roboto Mono',monospace; font-size:0.8rem; color:#60a5fa; font-weight:700;">${uTime}s</div>
+                                <div style="font-size:0.65rem; color:#ef4444; font-weight:600;">+${userRank.score}ms</div>
+                            </div>
                         </div>
-                        <div style="text-align: right;">
-                            <div style="font-family: 'Roboto Mono', monospace; font-size: 1rem; color: #60a5fa; font-weight: 700;">${uTimeStr}</div>
-                            <div style="font-size: 0.8rem; color: #ef4444; font-weight: 500;">${uDiffStr}</div>
-                        </div>
-                    </div>
-                `;
+                    </div>`;
             }
 
-            // Countdown Logic (Fix: Convert MS to Seconds first)
+            // === COUNTDOWN ===
             const remainingMS = window.leaderboardTimeLeft || 0;
             const remainingSeconds = Math.floor(remainingMS / 1000);
             const m = Math.floor(remainingSeconds / 60);
             const s = remainingSeconds % 60;
 
-            // FULL HEIGHT LAYOUT REPLACEMENT
             display.innerHTML = `
-                <!-- BACK BUTTON INSIDE CARD -->
                 <button class="back-btn" onclick="window.location.href='home.html'"
-                    style="position: absolute; top: 15px; left: 15px; z-index: 100; pointer-events: auto;">←
-                    HOME</button>
+                    style="position:absolute; top:12px; left:12px; z-index:100; pointer-events:auto;">← HOME</button>
 
-                <div style="
-                    display: flex; 
-                    flex-direction: column; 
-                    height: 100%; 
-                    width: 100%; 
-                    padding-top: 40px; 
-                ">
-                    <!-- HEADER: TARGET TIME -->
-                    <div style="text-align: center; margin-bottom: 20px; flex-shrink: 0;">
-                        <div style="font-size: 0.85rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px;">Target Time</div>
-                        <div style="
-                            font-family: 'Teko', sans-serif; 
-                            font-size: 4.5rem; 
-                            line-height: 1;
-                            font-weight: 700; 
-                            color: #FFD700;
-                            text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
-                        ">${targetTimeStr}</div>
+                <div style="display:flex; flex-direction:column; height:100%; width:100%; padding-top:38px;">
+                    <!-- TARGET TIME HEADER -->
+                    <div style="text-align:center; margin-bottom:8px; flex-shrink:0;">
+                        <div style="font-size:0.65rem; color:#94a3b8; text-transform:uppercase; letter-spacing:2px;">🎯 Target Time</div>
+                        <div style="font-family:'Teko',sans-serif; font-size:2.5rem; line-height:1; font-weight:700; color:#FFD700; text-shadow:0 0 15px rgba(255,215,0,0.25);">${targetTimeStr}</div>
                     </div>
 
-                    <!-- SCROLLABLE LIST AREA -->
-                    <div style="
-                        flex: 1; 
-                        overflow-y: auto; 
-                        min-height: 0; 
-                        padding-right: 5px;
-                        margin-bottom: 20px;
-                    ">
-                        
-                        <!-- List Header -->
-                        <div style="padding: 0 10px; margin-bottom: 10px; display: flex; font-size: 0.75rem; color: #64748b; font-weight: 600; text-transform: uppercase;">
-                            <div style="width: 50px;">Rank</div>
-                            <div style="flex: 1;">Player</div>
-                            <div style="text-align: right;">Time / Diff</div>
+                    <!-- YOUR RANK BANNER -->
+                    ${yourRankBanner}
+
+                    <!-- LEADERBOARD HEADER -->
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin:10px 0 6px; padding:0 4px;">
+                        <div style="font-size:0.7rem; color:#a78bfa; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;">📊 Leaderboard</div>
+                        ${totalPlayers ? `<div style="font-size:0.65rem; color:#64748b;">${totalPlayers} player${totalPlayers !== 1 ? 's' : ''}</div>` : ''}
+                    </div>
+
+                    <!-- SCROLLABLE LEADERBOARD -->
+                    <div style="flex:1; overflow-y:auto; min-height:0; padding-right:3px; margin-bottom:8px;">
+                        ${boardHtml}
+                        ${userSeparateRow}
+                    </div>
+
+                    <!-- FOOTER: ACTIONS + COUNTDOWN -->
+                    <div style="flex-shrink:0; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                        <div style="display:flex; gap:6px;">
+                            <button onclick="showMyWins()" style="background:linear-gradient(135deg,#22c55e,#16a34a); border:none; color:#fff; padding:6px 12px; border-radius:10px; font-size:0.75rem; font-weight:700; font-family:'Teko',sans-serif; letter-spacing:0.5px; cursor:pointer; box-shadow:0 2px 8px rgba(34,197,94,0.3); pointer-events:auto;">🏅 WINS</button>
+                            <button onclick="showGameHistory()" style="background:linear-gradient(135deg,#3b82f6,#2563eb); border:none; color:#fff; padding:6px 12px; border-radius:10px; font-size:0.75rem; font-weight:700; font-family:'Teko',sans-serif; letter-spacing:0.5px; cursor:pointer; box-shadow:0 2px 8px rgba(59,130,246,0.3); pointer-events:auto;">📜 HISTORY</button>
                         </div>
-
-                        ${winnersHtml}
-                        ${userRankHtml}
-                    </div>
-
-                    <!-- FOOTER: MY WINS + COUNTDOWN -->
-                    <div style="
-                        flex-shrink: 0; 
-                        padding-top: 12px; 
-                        border-top: 1px solid rgba(255,255,255,0.1);
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        gap: 10px;
-                    ">
-                        <button onclick="showMyWins()" style="
-                            background: linear-gradient(135deg, #22c55e, #16a34a);
-                            border: none;
-                            color: #fff;
-                            padding: 8px 16px;
-                            border-radius: 12px;
-                            font-size: 0.85rem;
-                            font-weight: 700;
-                            font-family: 'Teko', sans-serif;
-                            letter-spacing: 1px;
-                            cursor: pointer;
-                            display: flex;
-                            align-items: center;
-                            gap: 6px;
-                            box-shadow: 0 3px 10px rgba(34,197,94,0.3);
-                            pointer-events: auto;
-                            flex-shrink: 0;
-                        ">🏅 MY WINS</button>
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <div style="font-size: 0.8rem; color: #94a3b8;">Next:</div>
-                            <div style="
-                                font-family: 'Teko', sans-serif; 
-                                font-size: 2rem; 
-                                color: #fff; 
-                                font-weight: 600;
-                                letter-spacing: 1px;
-                            ">
-                                ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}
-                            </div>
+                        <div style="display:flex; align-items:center; gap:6px; background:rgba(124,58,237,0.1); border:1px solid rgba(124,58,237,0.25); border-radius:10px; padding:4px 10px;">
+                            <span style="font-size:0.6rem; color:#a78bfa; font-weight:600;">NEXT</span>
+                            <span style="font-family:'Teko',sans-serif; font-size:1.5rem; color:#fff; font-weight:700; letter-spacing:2px; line-height:1;">${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}</span>
                         </div>
                     </div>
                 </div>
@@ -1197,7 +1180,21 @@
                                 <div style="font-size:1.1rem; color:#FFD700; font-weight:600;">Tournament Starting...</div>
                             </div>`;
                     }
-                    setTimeout(() => window.location.reload(), 2000);
+                    // Re-emit ig to get fresh tournament data instead of full page reload
+                    // This avoids briefly showing stale/old tournament UI
+                    const _reloadFresh = () => {
+                        if (socket && socket.connected) {
+                            const _uid = localStorage.getItem('tc_user_id');
+                            const _email = localStorage.getItem('tc_email');
+                            const _uname = localStorage.getItem('tc_username');
+                            socket.emit('ig', { u: _uid, e: _email, n: _uname, t: '', m: 't' });
+                        } else {
+                            window.location.reload();
+                        }
+                    };
+                    setTimeout(_reloadFresh, 1500);
+                    // Retry once more if still no tournament after 4s
+                    setTimeout(() => { if (!hasActiveTournament) _reloadFresh(); }, 4000);
                     return;
                 }
 
@@ -1427,74 +1424,30 @@
         // Fallback for browser testing
         if (!window.cordova) connectServer();
 
-        // --- TRYS LOGIC & REGENERATION ---
+        // --- TRYS LOGIC (Server-Synced, Anti-Cheat) ---
         const TrysManager = {
             trys: 0,
-            regenTime: 15 * 60 * 1000, // 15 Minutes
-            _showEnterButton: false, // Track button state - DEFAULT HIDDEN until socket confirms
+            _showEnterButton: false,
 
             init() {
-                // 1. NEW USER BONUS (Safety check)
-                if (localStorage.getItem('user_trys') === null) {
-                    localStorage.setItem('user_trys', '0');
-                }
-
                 this.trys = parseInt(localStorage.getItem('user_trys') || '0');
-                if (localStorage.getItem('user_trys') === null) {
-                    this.trys = 0;
-                    localStorage.setItem('user_trys', '0');
-                }
-
                 this.updateUI();
-
-                // Real-time update for countdown
-                setInterval(() => this.updateUI(), 1000);
-            },
-
-            checkRegen() {
-                if (this.trys === 0) {
-                    const params = localStorage.getItem('regen_start');
-                    if (!params) {
-                        // Start Timer
-                        localStorage.setItem('regen_start', Date.now());
-                    } else {
-                        // Check Elapsed
-                        const elapsed = Date.now() - parseInt(params);
-                        if (elapsed >= this.regenTime) {
-                            // REFILL!
-                            this.trys = 6;
-                            localStorage.setItem('user_trys', '6');
-                            localStorage.removeItem('regen_start');
-                            showToast("Health Refilled! +6 ❤️");
-                            setTimeout(() => hideToast(), 2000);
-                        }
-                    }
-                } else {
-                    // Reset if they gained trys
-                    localStorage.removeItem('regen_start');
-                }
             },
 
             updateUI() {
-                this.checkRegen();
                 this.trys = parseInt(localStorage.getItem('user_trys') || '0');
-                // Health display removed - only shown on game page
-                // USE THE TRACKED STATE instead of defaulting to true
                 this._renderButton(this._showEnterButton);
             },
 
-            // Called by socket/tournament logic to SET the button state
             renderActionKey(showEnter = true) {
                 this._showEnterButton = showEnter;
                 this._renderButton(showEnter);
             },
 
-            // Internal render - does not change state
             _renderButton(showEnter) {
                 const area = document.getElementById('action-area');
                 if (!area) return;
                 if (showEnter) {
-                    // Show Enter button during play time
                     area.innerHTML = `
                         <button onclick="enterTournament()" class="relative group w-full py-4 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-[Teko] text-2xl tracking-widest uppercase shadow-[0_0_20px_rgba(124,58,237,0.5)] border border-violet-400/30 overflow-hidden transition-all active:scale-95 hover:shadow-[0_0_40px_rgba(124,58,237,0.8)] z-50 pointer-events-auto cursor-pointer">
                             <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
@@ -1504,98 +1457,39 @@
                         </button>
                     `;
                 } else {
-                    // Hide Enter button during leaderboard time or no tournament
                     area.innerHTML = '';
                 }
-            },
-
-            // SEAMLESS AD BREAK OVERLAY
-            showAdBreakOverlay(step) {
-                let overlay = document.getElementById('ad-break-overlay');
-                if (!overlay) {
-                    overlay = document.createElement('div');
-                    overlay.id = 'ad-break-overlay';
-                    overlay.style.position = 'fixed';
-                    overlay.style.top = '0';
-                    overlay.style.left = '0';
-                    overlay.style.width = '100%';
-                    overlay.style.height = '100%';
-                    overlay.style.background = 'black';
-                    overlay.style.zIndex = '2000';
-                    overlay.style.display = 'flex';
-                    overlay.style.flexDirection = 'column';
-                    overlay.style.justifyContent = 'center';
-                    overlay.style.alignItems = 'center';
-                    overlay.style.color = 'white';
-                    overlay.style.fontFamily = 'Fredoka One, cursive';
-                    document.body.appendChild(overlay);
-                }
-
-                overlay.style.display = 'flex';
-                overlay.innerHTML = `
-                    <div style="font-size: 2rem; color: #FFD700;">AD BREAK</div>
-                    <div style="font-size: 1.2rem; color: #94a3b8; margin-top: 10px;">
-                        ${step === 1 ? 'Video 1 of 2' : 'Video 2 of 2'}
-                    </div>
-                `;
-            },
-
-            hideAdBreakOverlay() {
-                const overlay = document.getElementById('ad-break-overlay');
-                if (overlay) overlay.style.display = 'none';
-            },
-
-            watchAd(count) {
-                if (count === 1) {
-                    // Promise based
-                    AdManager.showRewardVideoAd().then((success) => {
-                        if (success) this.addTrys(12);
-                    });
-                } else if (count === 2) {
-                    // SEAMLESS FLOW
-                    this.showAdBreakOverlay(1);
-
-                    setTimeout(() => {
-                        AdManager.showRewardVideoAd().then((success1) => {
-                            if (success1) {
-                                this.showAdBreakOverlay(2);
-                                setTimeout(() => {
-                                    AdManager.showRewardVideoAd().then((success2) => {
-                                        this.hideAdBreakOverlay();
-                                        if (success2) {
-                                            this.addTrys(20);
-                                        } else {
-                                            this.addTrys(12); // Fallback
-                                        }
-                                    });
-                                }, 500);
-                            } else {
-                                this.hideAdBreakOverlay();
-                            }
-                        });
-                    }, 500);
-                }
-            },
-
-            addTrys(amount) {
-                this.trys += amount;
-                // CAP health at 20 max to prevent stacking
-                if (this.trys > 20) this.trys = 20;
-                localStorage.setItem('user_trys', this.trys);
-                // Clear Regen
-                localStorage.removeItem('regen_start');
-
-                this.updateUI();
-
-                showToast(`+${amount} Trys Added!`);
-                setTimeout(() => hideToast(), 1500);
             }
         };
 
-        function enterTournament() {
+        // ENTER TOURNAMENT — calls server to reset health to 20 (anti-cheat)
+        async function enterTournament() {
+            const userId = localStorage.getItem('tc_user_id');
+            if (!userId) {
+                showToast('Please login first!');
+                setTimeout(() => window.location.href = 'login.html', 1500);
+                return;
+            }
+
+            try {
+                // Server resets health to 20 for this tournament entry
+                const res = await fetch(`${SERVER_URL}/api/health/tournament-entry`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    localStorage.setItem('user_trys', data.health);
+                    localStorage.removeItem('regen_start');
+                }
+            } catch (e) {
+                // Fallback: set locally if server unreachable
+                localStorage.setItem('user_trys', '20');
+                localStorage.removeItem('regen_start');
+            }
+
             localStorage.setItem('game_mode', 'tournament');
-            // Set flag to skip health check on game page load
-            // Health check will happen only when user clicks PLAY button
             localStorage.setItem('skip_health_check', 'true');
             window.location.href = 'game.html';
         }
