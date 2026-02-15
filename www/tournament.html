@@ -1171,10 +1171,20 @@
             const display = document.getElementById('countdown');
             if (display) {
                 display.innerHTML = `
-                    <div style="text-align: center; padding: 20px;">
-                        <div style="font-size: 1.5rem; color: #94a3b8; margin-bottom: 10px;">⏸️</div>
-                        <div style="font-size: 1.2rem; color: #94a3b8; font-weight: 600;">No Active Tournament</div>
-                        <div style="font-size: 0.9rem; color: #64748b; margin-top: 5px;">Waiting for next tournament...</div>
+                    <div style="width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:16px; padding:20px 0;">
+                        <!-- Icon -->
+                        <div style="width:80px; height:80px; border-radius:50%; background:rgba(148,163,184,0.08); border:2px solid rgba(148,163,184,0.15); display:flex; align-items:center; justify-content:center;">
+                            <span style="font-size:2.5rem; opacity:0.7;">⏸️</span>
+                        </div>
+                        <!-- Title -->
+                        <div style="text-align:center;">
+                            <div style="font-size:2rem; color:#cbd5e1; font-family:'Teko',sans-serif; font-weight:700; letter-spacing:2px; line-height:1;">NO ACTIVE TOURNAMENT</div>
+                            <div style="font-size:1rem; color:#64748b; margin-top:6px;">Check back soon for the next tournament!</div>
+                        </div>
+                        <!-- Hint -->
+                        <div style="padding:10px 20px; background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.15); border-radius:14px; margin-top:8px;">
+                            <div style="color:#818cf8; font-size:0.85rem; font-weight:600;">Tournaments are scheduled daily</div>
+                        </div>
                     </div>
                 `;
             }
@@ -1199,6 +1209,9 @@
             const display = document.getElementById('countdown');
             if (!display || !scheduled) return;
 
+            // Track if first render (full DOM) vs subsequent (just update timer text)
+            let _scheduledFirstRender = true;
+
             function updateCountdown() {
                 const now = Date.now();
                 const timeLeft = scheduled.scheduledTime - now;
@@ -1209,13 +1222,17 @@
                     const cd = document.getElementById('countdown');
                     if (cd) {
                         cd.innerHTML = `
-                            <div style="text-align:center; padding:30px; width:100%;">
-                                <div style="display:inline-block; width:32px; height:32px; border:3px solid rgba(255,255,255,0.1); border-top-color:#FFD700; border-radius:50%; animation:spin 0.8s linear infinite; margin-bottom:12px;"></div>
-                                <div style="font-size:1.1rem; color:#FFD700; font-weight:600;">Tournament Starting...</div>
+                            <div style="width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:16px;">
+                                <div style="width:60px; height:60px; border-radius:50%; background:rgba(255,215,0,0.08); display:flex; align-items:center; justify-content:center;">
+                                    <div style="width:36px; height:36px; border:3px solid rgba(255,255,255,0.1); border-top-color:#FFD700; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+                                </div>
+                                <div style="text-align:center;">
+                                    <div style="font-size:2rem; color:#FFD700; font-family:'Teko',sans-serif; font-weight:700; letter-spacing:2px;">TOURNAMENT STARTING...</div>
+                                    <div style="font-size:0.9rem; color:#94a3b8; margin-top:4px;">Get ready to compete!</div>
+                                </div>
                             </div>`;
                     }
                     // Re-emit ig to get fresh tournament data instead of full page reload
-                    // This avoids briefly showing stale/old tournament UI
                     const _reloadFresh = () => {
                         if (socket && socket.connected) {
                             const _uid = localStorage.getItem('tc_user_id');
@@ -1236,113 +1253,156 @@
                 const minutes = Math.floor((timeLeft % 3600000) / 60000);
                 const seconds = Math.floor((timeLeft % 60000) / 1000);
 
-                // Check if it's a daily tournament
                 const isDaily = scheduled.type === 'daily';
-                const tournamentLabel = isDaily ? '📆 Daily Tournament' : '📅 Next Tournament';
-                const timeDisplay = hours > 0
-                    ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-                    : `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+                // Build individual digit strings
+                const h = String(hours).padStart(2, '0');
+                const m = String(minutes).padStart(2, '0');
+                const s = String(seconds).padStart(2, '0');
 
                 let timeInfo = '';
                 if (isDaily) {
                     const scheduledDate = new Date(scheduled.scheduledTime);
                     const isToday = scheduledDate.toDateString() === new Date().toDateString();
-                    timeInfo = isToday
-                        ? `Today at ${scheduled.time}`
-                        : `Tomorrow at ${scheduled.time}`;
+                    timeInfo = isToday ? `Today at ${scheduled.time}` : `Tomorrow at ${scheduled.time}`;
                 } else {
                     timeInfo = new Date(scheduled.scheduledTime).toLocaleString();
                 }
 
-                // SAME LAYOUT AS ACTIVE TOURNAMENT: Prize Pool TOP, Timer BOTTOM
+                // On subsequent renders, just update the timer digits (no flicker)
+                if (!_scheduledFirstRender) {
+                    const timerEl = document.getElementById('sched-timer-display');
+                    const infoEl = document.getElementById('sched-time-info');
+                    if (timerEl) {
+                        if (hours > 0) {
+                            timerEl.innerHTML = `<span class="sched-digit">${h[0]}</span><span class="sched-digit">${h[1]}</span><span class="sched-sep">:</span><span class="sched-digit">${m[0]}</span><span class="sched-digit">${m[1]}</span><span class="sched-sep">:</span><span class="sched-digit">${s[0]}</span><span class="sched-digit">${s[1]}</span>`;
+                        } else {
+                            timerEl.innerHTML = `<span class="sched-digit">${m[0]}</span><span class="sched-digit">${m[1]}</span><span class="sched-sep">:</span><span class="sched-digit">${s[0]}</span><span class="sched-digit">${s[1]}</span>`;
+                        }
+                    }
+                    if (infoEl) infoEl.textContent = timeInfo;
+                    return;
+                }
+
+                _scheduledFirstRender = false;
+
+                // Build timer HTML with styled digits
+                let timerDigitsHtml;
+                if (hours > 0) {
+                    timerDigitsHtml = `<span class="sched-digit">${h[0]}</span><span class="sched-digit">${h[1]}</span><span class="sched-sep">:</span><span class="sched-digit">${m[0]}</span><span class="sched-digit">${m[1]}</span><span class="sched-sep">:</span><span class="sched-digit">${s[0]}</span><span class="sched-digit">${s[1]}</span>`;
+                } else {
+                    timerDigitsHtml = `<span class="sched-digit">${m[0]}</span><span class="sched-digit">${m[1]}</span><span class="sched-sep">:</span><span class="sched-digit">${s[0]}</span><span class="sched-digit">${s[1]}</span>`;
+                }
+
                 const hasRewards = scheduled.rewards && scheduled.rewards.length > 0;
+
+                // --- PRIZE POOL (compact, below timer) ---
+                let prizeHtml = '';
                 if (hasRewards) {
                     const maxWR = Math.max(...scheduled.rewards.map(r => parseInt(r.max) || 0));
                     const mdls = ['🥇','🥈','🥉'];
-                    display.innerHTML = `
-                        <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:8px; padding:0; height:100%; justify-content:space-between;">
-                            <!-- PRIZE POOL SECTION (TOP) - SAME AS ACTIVE -->
-                            <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:8px;">
-                                <div style="
-                                    background:linear-gradient(135deg,rgba(255,215,0,0.13),rgba(255,165,0,0.06));
-                                    border:1.5px solid rgba(255,215,0,0.3);
-                                    border-radius:12px; padding:10px 16px;
-                                    text-align:center; width:100%;
-                                    position:relative; overflow:hidden;
-                                ">
-                                    <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.06),transparent);animation:shineSlide 3s infinite;"></div>
-                                    <div style="font-size:1.4rem; font-family:'Teko',sans-serif; color:#FFD700; font-weight:700; letter-spacing:2px; line-height:1;">
-                                        🏆 TOP ${maxWR} PLAYER${maxWR > 1 ? 'S' : ''} WIN!
-                                    </div>
-                                    <div style="font-size:0.6rem; color:#a78bfa; margin-top:3px; letter-spacing:1.5px; font-weight:600;">PRIZE POOL</div>
-                                </div>
-                                ${scheduled.rewards.map((r, i) => {
-                                const gradients = [
-                                    'linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.06))',
-                                    'linear-gradient(135deg,rgba(192,192,192,0.09),rgba(138,155,174,0.04))',
-                                    'linear-gradient(135deg,rgba(205,127,50,0.09),rgba(160,82,45,0.04))'
-                                ];
-                                const borderColors = ['rgba(255,215,0,0.3)','rgba(192,192,192,0.22)','rgba(205,127,50,0.22)'];
-                                const rankGradients = ['linear-gradient(135deg,#FFD700,#F59E0B)','linear-gradient(135deg,#C0C0C0,#8a9bae)','linear-gradient(135deg,#cd7f32,#a0522d)'];
-                                const bg = gradients[i] || 'linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.04))';
-                                const bdr = borderColors[i] || 'rgba(139,92,246,0.18)';
-                                const rankBg = rankGradients[i] || 'linear-gradient(135deg,#6366f1,#8b5cf6)';
-                                const medal = mdls[i] || '🏅';
-                                const rankLabel = parseInt(r.min) !== parseInt(r.max) ? 'RANK #' + r.min + ' - #' + r.max : 'RANK #' + r.min;
-                                return `
-                                    <div style="
-                                        background:${bg};
-                                        padding:10px 12px;
-                                        border-radius:14px;
-                                        display:flex;
-                                        align-items:center;
-                                        gap:10px;
-                                        border:1.5px solid ${bdr};
-                                        width:100%;
-                                    ">
-                                        <div style="
-                                            width:50px; height:50px;
-                                            border-radius:12px;
-                                            overflow:hidden;
-                                            flex-shrink:0;
-                                            border:2px solid ${bdr};
-                                        ">${r.img && r.img.startsWith('http') ? `<img src="${r.img}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-size:1.6rem;">${medal}</div>`}</div>
-                                        <div style="flex:1; min-width:0;">
-                                            <div style="font-size:1.05rem; color:#fff; font-weight:700; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family:'Teko',sans-serif; letter-spacing:0.5px;">${r.name}</div>
-                                            <div style="display:inline-flex; align-items:center; background:${rankBg}; padding:3px 10px; border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
-                                                <span style="font-size:0.78rem; font-weight:800; color:#fff; font-family:'Teko',sans-serif; letter-spacing:1.5px; text-shadow:0 1px 3px rgba(0,0,0,0.4);">${rankLabel}</span>
-                                            </div>
-                                        </div>
-                                        <div style="font-size:1.3rem; flex-shrink:0;">${medal}</div>
-                                    </div>`;
-                            }).join('')}
-                            </div>
-                            <!-- COUNTDOWN TIMER (BOTTOM) - SAME STYLE AS ACTIVE -->
+                    prizeHtml = `
+                        <!-- Prize Pool Section -->
+                        <div style="width:100%; margin-top:auto;">
                             <div style="
-                                display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
-                                background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.3);
-                                border-radius:12px; padding:10px 20px; width:100%;
-                                margin-top:auto;
+                                background:linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.04));
+                                border:1.5px solid rgba(255,215,0,0.2);
+                                border-radius:14px; padding:10px 14px;
+                                text-align:center; width:100%; margin-bottom:8px;
+                                position:relative; overflow:hidden;
                             ">
-                                <span style="font-size:0.7rem; color:#60a5fa; font-weight:600; text-transform:uppercase; letter-spacing:1.5px;">${tournamentLabel}</span>
-                                <span style="font-size:1.8rem; color:#fff; font-family:'Teko',sans-serif; font-weight:700; letter-spacing:3px; text-shadow:0 0 10px rgba(124,58,237,0.4);">⏱ ${timeDisplay}</span>
-                                <span style="font-size:0.65rem; color:#94a3b8;">${timeInfo}</span>
+                                <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.05),transparent);animation:shineSlide 3s infinite;"></div>
+                                <div style="font-size:1.3rem; font-family:'Teko',sans-serif; color:#FFD700; font-weight:700; letter-spacing:2px; line-height:1;">
+                                    🏆 TOP ${maxWR} WIN PRIZES!
+                                </div>
                             </div>
-                        </div>
-                    `;
-                } else {
-                    // No rewards - simple countdown
-                    display.innerHTML = `
-                        <div style="width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:12px;">
-                            <div style="font-size:0.85rem; color:#60a5fa; text-transform:uppercase; letter-spacing:1.5px; font-weight:600;">${tournamentLabel}</div>
-                            <div style="font-size:3.5rem; color:#FFD700; font-weight:700; font-family:'Teko',sans-serif; line-height:1; text-shadow:0 0 20px rgba(255,215,0,0.4);">
-                                ${timeDisplay}
+                            <div style="display:flex; flex-direction:column; gap:6px;">
+                                ${scheduled.rewards.map((r, i) => {
+                                    const gradients = [
+                                        'linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.04))',
+                                        'linear-gradient(135deg,rgba(192,192,192,0.07),rgba(138,155,174,0.03))',
+                                        'linear-gradient(135deg,rgba(205,127,50,0.07),rgba(160,82,45,0.03))'
+                                    ];
+                                    const borderColors = ['rgba(255,215,0,0.25)','rgba(192,192,192,0.18)','rgba(205,127,50,0.18)'];
+                                    const rankGradients = ['linear-gradient(135deg,#FFD700,#F59E0B)','linear-gradient(135deg,#C0C0C0,#8a9bae)','linear-gradient(135deg,#cd7f32,#a0522d)'];
+                                    const bg = gradients[i] || 'linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.03))';
+                                    const bdr = borderColors[i] || 'rgba(139,92,246,0.15)';
+                                    const rankBg = rankGradients[i] || 'linear-gradient(135deg,#6366f1,#8b5cf6)';
+                                    const medal = mdls[i] || '🏅';
+                                    const rankLabel = parseInt(r.min) !== parseInt(r.max) ? '#' + r.min + '-#' + r.max : '#' + r.min;
+                                    return `
+                                    <div style="background:${bg}; padding:8px 10px; border-radius:12px; display:flex; align-items:center; gap:8px; border:1px solid ${bdr}; width:100%;">
+                                        <div style="width:40px; height:40px; border-radius:10px; overflow:hidden; flex-shrink:0; border:1.5px solid ${bdr};">
+                                            ${r.img && r.img.startsWith('http') ? `<img src="${r.img}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-size:1.3rem;">${medal}</div>`}
+                                        </div>
+                                        <div style="flex:1; min-width:0;">
+                                            <div style="font-size:0.95rem; color:#fff; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family:'Teko',sans-serif; letter-spacing:0.5px;">${r.name}</div>
+                                        </div>
+                                        <div style="background:${rankBg}; padding:2px 8px; border-radius:10px;">
+                                            <span style="font-size:0.7rem; font-weight:800; color:#fff; font-family:'Teko',sans-serif; letter-spacing:1px;">${rankLabel}</span>
+                                        </div>
+                                    </div>`;
+                                }).join('')}
                             </div>
-                            <div style="font-size:0.8rem; color:#94a3b8;">${timeInfo}</div>
-                            ${isDaily ? `<div style="font-size:0.7rem; color:#64748b; opacity:0.8;">Repeats daily at ${scheduled.time}</div>` : ''}
                         </div>
                     `;
                 }
+
+                display.innerHTML = `
+                    <style>
+                        .sched-digit {
+                            display:inline-flex; align-items:center; justify-content:center;
+                            width:42px; height:56px;
+                            background:linear-gradient(180deg,rgba(124,58,237,0.2),rgba(124,58,237,0.08));
+                            border:1.5px solid rgba(124,58,237,0.35);
+                            border-radius:12px;
+                            font-family:'Teko',sans-serif; font-size:2.8rem; font-weight:700;
+                            color:#fff; line-height:1;
+                            text-shadow:0 0 15px rgba(124,58,237,0.5);
+                            box-shadow:0 4px 12px rgba(124,58,237,0.15);
+                        }
+                        .sched-sep {
+                            font-family:'Teko',sans-serif; font-size:2.4rem; font-weight:700;
+                            color:rgba(124,58,237,0.7); margin:0 3px;
+                            animation:schedBlink 1s infinite;
+                        }
+                        @keyframes schedBlink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+                        @keyframes schedGlow { 0%,100%{box-shadow:0 0 20px rgba(124,58,237,0.15);} 50%{box-shadow:0 0 35px rgba(124,58,237,0.3);} }
+                    </style>
+                    <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:10px; padding:0; height:100%; justify-content:flex-start;">
+                        <!-- COUNTDOWN TIMER SECTION (HERO - TOP) -->
+                        <div style="
+                            width:100%; text-align:center;
+                            padding:18px 14px 14px;
+                            background:linear-gradient(180deg,rgba(124,58,237,0.08),transparent);
+                            border:1.5px solid rgba(124,58,237,0.2);
+                            border-radius:18px;
+                            animation:schedGlow 3s ease-in-out infinite;
+                        ">
+                            <!-- STARTS IN label -->
+                            <div style="font-size:1rem; color:#a78bfa; font-weight:700; text-transform:uppercase; letter-spacing:3px; margin-bottom:6px;">
+                                ${isDaily ? '📆 NEXT TOURNAMENT IN' : '⏱️ STARTS IN'}
+                            </div>
+
+                            <!-- BIG TIMER DIGITS -->
+                            <div id="sched-timer-display" style="display:flex; align-items:center; justify-content:center; gap:4px; margin:6px 0 10px;">
+                                ${timerDigitsHtml}
+                            </div>
+
+                            <!-- Time Info (Today at 6:00 PM) -->
+                            <div style="
+                                display:inline-flex; align-items:center; gap:6px;
+                                background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+                                border-radius:20px; padding:5px 16px;
+                            ">
+                                <span style="font-size:0.95rem;">🕐</span>
+                                <span id="sched-time-info" style="font-size:0.95rem; color:#e2e8f0; font-weight:600;">${timeInfo}</span>
+                            </div>
+                        </div>
+
+                        ${prizeHtml}
+                    </div>
+                `;
             }
 
             updateCountdown();
@@ -1953,6 +2013,7 @@
 
         // --- SHOW REWARDS (PRIZE POOL) ---
         async function showRewards() {
+            AdManager.hideAllAds();
             const modal = document.getElementById('reward-modal');
             const container = document.getElementById('reward-list-container');
             modal.style.display = 'flex';
@@ -2046,6 +2107,7 @@
 
         // --- MY WINS ---
         async function showMyWins() {
+            AdManager.hideAllAds();
             const modal = document.getElementById('my-wins-modal');
             const container = document.getElementById('my-wins-list');
             modal.style.display = 'flex';
@@ -2254,6 +2316,7 @@
 
         // --- GAME HISTORY ---
         async function showGameHistory() {
+            AdManager.hideAllAds();
             const modal = document.getElementById('game-history-modal');
             const container = document.getElementById('game-history-list');
             modal.style.display = 'flex';
@@ -2374,6 +2437,7 @@
                 preview.style.display = 'none';
             }
 
+            AdManager.hideAllAds();
             document.getElementById('shipping-modal').style.display = 'flex';
         }
 
@@ -2526,6 +2590,7 @@
             else if (rank === 3) glowEl.style.background = 'radial-gradient(circle,rgba(205,127,50,0.12) 0%,transparent 70%)';
             else glowEl.style.background = 'radial-gradient(circle,rgba(139,92,246,0.12) 0%,transparent 70%)';
 
+            AdManager.hideAllAds();
             document.getElementById('winner-overlay').style.display = 'flex';
             startConfetti();
         }
@@ -2708,6 +2773,7 @@
 
             statusArea.innerHTML = `<div style="display:inline-block; width:30px; height:30px; border:3px solid #475569; border-top-color:#60a5fa; border-radius:50%; animation:spin 0.8s linear infinite;"></div><div style="color:#94a3b8; font-size:1rem; margin-top:10px;">Loading order status...</div>`;
             contactArea.style.display = 'none';
+            AdManager.hideAllAds();
             modal.style.display = 'flex';
 
             try {
