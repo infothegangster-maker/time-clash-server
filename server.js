@@ -1059,16 +1059,29 @@ fastify.get('/api/health', async (req, reply) => {
     }
 });
 
-// POST: Tournament entry — reset health to 20
+// POST: Tournament entry — reset health to 20 (only ONCE per tournament)
 fastify.post('/api/health/tournament-entry', async (req, reply) => {
     try {
         const { userId } = req.body;
         if (!userId) return { error: 'userId required' };
 
+        // Check if user already got health for this tournament
+        const activeTid = currentTournamentKey || 'none';
+        const lastHealthTid = await redis.get(`health_tid:${userId}`);
+
+        if (lastHealthTid === activeTid) {
+            // Same tournament — return current health, don't reset
+            const currentHealth = parseInt(await redis.get(`health:${userId}`)) || 0;
+            console.log(`❤️ [HEALTH] Re-entry same tournament: ${userId} → ${currentHealth} HP (no reset)`);
+            return { success: true, health: currentHealth, sameTourn: true };
+        }
+
+        // Different tournament — reset to 20
         await redis.set(`health:${userId}`, HEALTH_MAX);
         await redis.del(`health_regen:${userId}`);
-        console.log(`❤️ [HEALTH] Tournament entry: ${userId} → ${HEALTH_MAX} HP`);
-        return { success: true, health: HEALTH_MAX };
+        await redis.set(`health_tid:${userId}`, activeTid);
+        console.log(`❤️ [HEALTH] Tournament entry: ${userId} → ${HEALTH_MAX} HP (tid: ${activeTid})`);
+        return { success: true, health: HEALTH_MAX, sameTourn: false };
     } catch (e) {
         return { error: e.message };
     }
@@ -1229,21 +1242,28 @@ fastify.post('/api/admin/physical-orders/:orderId/status', async (req, reply) =>
     }
 });
 
-// Get user's game history (last 5 games)
+// Get user's tournament history (best score per tournament)
 fastify.get('/api/user-game-history', async (req, reply) => {
     try {
         const userId = req.query.userId;
         if (!userId) return { error: 'userId required', games: [] };
 
-        // Check Redis for recent game results stored per user
-        const historyKey = `user:games:${userId}`;
-        const rawHistory = await redis.lrange(historyKey, 0, 4);
+        // Read from hash: each field = tournamentId, value = best game JSON
+        const historyKey = `user:best_games:${userId}`;
+        const allEntries = await redis.hgetall(historyKey);
 
-        const games = rawHistory.map(x => {
+        if (!allEntries || Object.keys(allEntries).length === 0) {
+            return { games: [] };
+        }
+
+        const games = Object.values(allEntries).map(x => {
             try { return JSON.parse(x); } catch { return null; }
         }).filter(Boolean);
 
-        return { games };
+        // Sort by timestamp (most recent first), return last 10
+        games.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+        return { games: games.slice(0, 10) };
     } catch (e) {
         return { error: e.message, games: [] };
     }
@@ -3101,8 +3121,8 @@ io.on('connection', (socket) => {
         // Use Cached Leaderboard
         const optimizedLeaders = cachedTop3.map(p => ({ u: p.user, s: p.score }));
 
-        // Save game to user's history (last 5 games)
-        if (session.userId && session.mode === 't') {
+        // Save BEST score per tournament (not every try)
+        if (session.userId && session.mode === 't' && newRecord) {
             try {
                 const gameEntry = JSON.stringify({
                     ts: Date.now(),
@@ -3111,13 +3131,23 @@ io.on('connection', (socket) => {
                     target: target,
                     rank: rank,
                     win: win ? 1 : 0,
-                    newRecord: newRecord ? 1 : 0,
                     tid: currentTournamentId
                 });
-                const historyKey = `user:games:${session.userId}`;
-                await redis.lpush(historyKey, gameEntry);
-                await redis.ltrim(historyKey, 0, 4); // Keep only last 5
+                const historyKey = `user:best_games:${session.userId}`;
+                await redis.hset(historyKey, currentTournamentId, gameEntry);
                 await redis.expire(historyKey, 86400 * 7); // 7 days TTL
+                // Trim to last 10 tournaments (cleanup old entries)
+                const allFields = await redis.hkeys(historyKey);
+                if (allFields.length > 10) {
+                    // Parse all entries, sort by timestamp, remove oldest
+                    const entries = [];
+                    for (const f of allFields) {
+                        try { entries.push({ field: f, data: JSON.parse(await redis.hget(historyKey, f)) }); } catch {}
+                    }
+                    entries.sort((a, b) => (b.data.ts || 0) - (a.data.ts || 0));
+                    const toRemove = entries.slice(10).map(e => e.field);
+                    if (toRemove.length > 0) await redis.hdel(historyKey, ...toRemove);
+                }
             } catch (e) { /* ignore history save errors */ }
         }
 

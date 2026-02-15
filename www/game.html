@@ -555,6 +555,122 @@
             box-shadow: 0 4px 0 #b45309;
         }
 
+        /* TOP SCORES POPUP */
+        #top-scores-popup {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.88);
+            z-index: 600;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(6px);
+        }
+        #top-scores-popup .ts-card {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            border-radius: 20px;
+            padding: 24px 20px;
+            width: 90%;
+            max-width: 380px;
+            max-height: 70vh;
+            border: 1px solid rgba(139,92,246,0.3);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 30px rgba(139,92,246,0.15);
+            display: flex;
+            flex-direction: column;
+        }
+        #top-scores-popup .ts-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-shrink: 0;
+        }
+        #top-scores-popup .ts-title {
+            font-family: 'Teko', sans-serif;
+            font-size: 1.6rem;
+            color: #FFD700;
+            font-weight: 700;
+            letter-spacing: 2px;
+        }
+        #top-scores-popup .ts-close {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #94a3b8;
+            font-size: 1.4rem;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #top-scores-popup .ts-list {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+        #top-scores-popup .ts-row {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        #top-scores-popup .ts-row.is-you {
+            background: rgba(59,130,246,0.15);
+            border-color: rgba(59,130,246,0.4);
+        }
+        #top-scores-popup .ts-rank {
+            width: 36px;
+            font-size: 1.1rem;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        #top-scores-popup .ts-name {
+            flex: 1;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #fff;
+            padding-left: 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #top-scores-popup .ts-score {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9rem;
+            color: #FFD700;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        #top-scores-popup .ts-empty {
+            text-align: center;
+            color: #64748b;
+            padding: 30px 10px;
+            font-size: 1rem;
+        }
+        #top-scores-popup .ts-refresh {
+            margin-top: 12px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        #top-scores-popup .ts-refresh-btn {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border: none;
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 10px;
+            font-family: 'Teko', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            cursor: pointer;
+        }
+
         /* REPURPOSED TRYS DISPLAY (Badge Style) */
         #game-trys-display {
             font-family: 'Roboto Mono', monospace;
@@ -586,24 +702,39 @@
     <!-- REFILL POPUP -->
     <div id="refill-popup">
         <div class="refill-card">
-            <div class="refill-title">OUT OF TRYS!</div>
-            <div style="color: #94a3b8; margin-bottom: 20px;">Watch Ads to Continue Playing</div>
+            <div class="refill-title">OUT OF HEALTH!</div>
+            <div style="color: #94a3b8; margin-bottom: 15px;">Watch an Ad or Wait to Refill</div>
 
-            <!-- OPTION 1 -->
-            <button class="refill-btn btn-12" onclick="TrysManager.watchAd(1)">
-                <span>📺 Watch 1 Ad</span>
-                <span style="background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 4px;">+12 ❤️</span>
-            </button>
-
-            <!-- OPTION 2 -->
-            <button class="refill-btn btn-20" onclick="TrysManager.watchAd(2)">
-                <span>📺 Watch 2 Ads</span>
+            <!-- WATCH 1 AD = +20 HEALTH -->
+            <button class="refill-btn btn-20" onclick="TrysManager.watchAd()">
+                <span>📺 Watch Ad</span>
                 <span style="background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 4px;">+20 ❤️</span>
             </button>
+
+            <!-- REFILL TIMER -->
+            <div id="refill-timer-display" style="color: #facc15; font-size: 1.1rem; margin: 12px 0 8px; font-family: 'Roboto Mono', monospace;">
+                ⏳ Refill in: --:--
+            </div>
 
             <button onclick="goHome()"
                 style="background: transparent; border: none; color: #64748b; margin-top: 10px; cursor: pointer;">Go
                 Home</button>
+        </div>
+    </div>
+
+    <!-- TOP SCORES POPUP -->
+    <div id="top-scores-popup">
+        <div class="ts-card">
+            <div class="ts-header">
+                <div class="ts-title">🏆 LIVE LEADERBOARD</div>
+                <button class="ts-close" onclick="closeTopScores()">✕</button>
+            </div>
+            <div class="ts-list" id="top-scores-list">
+                <div class="ts-empty">Loading...</div>
+            </div>
+            <div class="ts-refresh">
+                <button class="ts-refresh-btn" onclick="fetchTopScores()">🔄 REFRESH</button>
+            </div>
         </div>
     </div>
 
@@ -620,6 +751,19 @@
                     <div class="rank-badge" id="rank-display">RANK: --</div>
                     <div class="best-badge" id="best-display">BEST: --ms</div>
                     <div id="game-trys-display">❤️ --</div>
+                    <button onclick="openTopScores()" style="
+                        font-family: 'Roboto Mono', monospace;
+                        font-size: 0.8rem;
+                        padding: 6px 10px;
+                        background: rgba(255,215,0,0.15);
+                        border-radius: 12px;
+                        color: #FFD700;
+                        border: 1px solid rgba(255,215,0,0.3);
+                        cursor: pointer;
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 4px;
+                    ">📊 TOP</button>
                 </div>
 
                 <div class="timer-container" id="timer-box">
@@ -672,11 +816,9 @@
         const SERVER_URL = "https://time-clash-server.onrender.com";
         let socket = null;
 
-        // CLEANUP & GO HOME
+        // CLEANUP & GO BACK TO TOURNAMENT
         function goHome() {
-            // NO CLEANUP requested ("same native ad")
-            // AdManager.hideAllAds(); // REMOVED
-            window.location.href = 'home.html';
+            window.location.href = 'tournament.html';
         }
 
         document.addEventListener('deviceready', () => {
@@ -698,35 +840,67 @@
             // Logic removed
         }
 
-        // --- TRYS MANAGER ---
+        // --- TRYS MANAGER (Server-Synced, Anti-Cheat) ---
         const TrysManager = {
             trys: 0,
             mode: 'practice',
+            regenInterval: null,
 
             init() {
                 this.mode = localStorage.getItem('game_mode') || 'practice';
-                this.trys = parseInt(localStorage.getItem('user_trys') || '0');
 
-                // Update UI based on Mode
                 if (this.mode === 'practice') {
                     document.getElementById('game-trys-display').innerText = "PRACTICE MODE";
-                    document.getElementById('game-trys-display').style.color = "#4ade80"; // Green
+                    document.getElementById('game-trys-display').style.color = "#4ade80";
                 } else {
+                    // Sync health from server
+                    this.syncFromServer();
+                }
+            },
+
+            async syncFromServer() {
+                const userId = localStorage.getItem('tc_user_id');
+                if (!userId) return;
+                try {
+                    const res = await fetch(`${SERVER_URL}/api/health?userId=${encodeURIComponent(userId)}`);
+                    const data = await res.json();
+                    this.trys = data.health || 0;
+                    localStorage.setItem('user_trys', this.trys);
                     this.updateUI();
-                    // Don't check trys on page load - only check when user clicks START button
+
+                    // Start refill timer display if health is 0
+                    if (this.trys <= 0 && data.regenRemaining) {
+                        this.startRefillTimer(data.regenRemaining);
+                    }
+                } catch (e) {
+                    this.trys = parseInt(localStorage.getItem('user_trys') || '0');
+                    this.updateUI();
                 }
             },
 
             updateUI() {
                 if (this.mode === 'tournament') {
-                    document.getElementById('game-trys-display').innerText = `❤️ ${this.trys}`;
-                    document.getElementById('game-trys-display').style.color = this.trys > 0 ? "#fff" : "#ef4444";
+                    const el = document.getElementById('game-trys-display');
+                    if (el) {
+                        el.innerText = `❤️ ${this.trys}`;
+                        el.style.color = this.trys > 0 ? "#fff" : "#ef4444";
+                    }
+                }
+            },
+
+            setHealth(h) {
+                this.trys = h;
+                localStorage.setItem('user_trys', this.trys);
+                this.updateUI();
+                // Stop refill timer if health restored
+                if (h > 0 && this.regenInterval) {
+                    clearInterval(this.regenInterval);
+                    this.regenInterval = null;
                 }
             },
 
             checkTrys() {
                 if (this.mode === 'practice') return true;
-
                 if (this.trys <= 0) {
                     this.showRefillPopup();
                     return false;
@@ -736,11 +910,8 @@
 
             consumeTry() {
                 if (this.mode === 'practice') return true;
-
+                // Server deducts health on 'st' event — just check locally
                 if (this.trys > 0) {
-                    this.trys--;
-                    localStorage.setItem('user_trys', this.trys);
-                    this.updateUI();
                     return true;
                 } else {
                     this.showRefillPopup();
@@ -750,91 +921,79 @@
 
             showRefillPopup() {
                 document.getElementById('refill-popup').style.display = 'flex';
+                // Start refill timer display
+                this.syncFromServer();
             },
 
-            // SEAMLESS AD BREAK OVERLAY
-            showAdBreakOverlay(step) {
-                let overlay = document.getElementById('ad-break-overlay');
-                if (!overlay) {
-                    overlay = document.createElement('div');
-                    overlay.id = 'ad-break-overlay';
-                    overlay.style.position = 'fixed';
-                    overlay.style.top = '0';
-                    overlay.style.left = '0';
-                    overlay.style.width = '100%';
-                    overlay.style.height = '100%';
-                    overlay.style.background = 'black';
-                    overlay.style.zIndex = '2000';
-                    overlay.style.display = 'flex';
-                    overlay.style.flexDirection = 'column';
-                    overlay.style.justifyContent = 'center';
-                    overlay.style.alignItems = 'center';
-                    overlay.style.color = 'white';
-                    overlay.style.fontFamily = 'Fredoka One, cursive';
-                    document.body.appendChild(overlay);
-                }
+            startRefillTimer(remainingMs) {
+                if (this.regenInterval) clearInterval(this.regenInterval);
+                let remaining = remainingMs;
+                const timerEl = document.getElementById('refill-timer-display');
 
-                overlay.style.display = 'flex';
-                overlay.innerHTML = `
-                    <div style="font-size: 2rem; color: #FFD700;">AD BREAK</div>
-                    <div style="font-size: 1.2rem; color: #94a3b8; margin-top: 10px;">
-                        ${step === 1 ? 'Video 1 of 2' : 'Video 2 of 2'}
-                    </div>
-                `;
+                const tick = () => {
+                    if (remaining <= 0 || this.trys > 0) {
+                        if (timerEl) timerEl.innerText = '✅ Refill Ready!';
+                        clearInterval(this.regenInterval);
+                        this.regenInterval = null;
+                        // Claim refill from server
+                        this.claimRefill();
+                        return;
+                    }
+                    const m = Math.floor(remaining / 60000);
+                    const s = Math.floor((remaining % 60000) / 1000);
+                    if (timerEl) timerEl.innerText = `⏳ Refill in: ${m}:${String(s).padStart(2, '0')}`;
+                    remaining -= 1000;
+                };
+
+                tick();
+                this.regenInterval = setInterval(tick, 1000);
             },
 
-            hideAdBreakOverlay() {
-                const overlay = document.getElementById('ad-break-overlay');
-                if (overlay) overlay.style.display = 'none';
-            },
-
-            watchAd(count) {
-                if (count === 1) {
-                    // Promise based
-                    AdManager.showRewardVideoAd().then((success) => {
-                        if (success) this.addTrys(12);
+            async claimRefill() {
+                const userId = localStorage.getItem('tc_user_id');
+                if (!userId) return;
+                try {
+                    const res = await fetch(`${SERVER_URL}/api/health/refill`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId })
                     });
-                } else if (count === 2) {
-                    // SEAMLESS FLOW
-                    this.showAdBreakOverlay(1);
-
-                    setTimeout(() => {
-                        AdManager.showRewardVideoAd().then((success1) => {
-                            if (success1) {
-                                this.showAdBreakOverlay(2);
-                                setTimeout(() => {
-                                    AdManager.showRewardVideoAd().then((success2) => {
-                                        this.hideAdBreakOverlay();
-                                        if (success2) {
-                                            this.addTrys(20);
-                                        } else {
-                                            this.addTrys(12); // Fallback
-                                        }
-                                    });
-                                }, 500);
-                            } else {
-                                this.hideAdBreakOverlay();
-                            }
-                        });
-                    }, 500);
-                }
+                    const data = await res.json();
+                    if (data.success) {
+                        this.setHealth(data.health);
+                        document.getElementById('refill-popup').style.display = 'none';
+                        Hacking.showToast('❤️ Health Refilled! +20');
+                        setTimeout(() => Hacking.hideToast(), 1500);
+                        setTimeout(() => Game.resetToGame(), 800);
+                    }
+                } catch (e) { /* retry on next tick */ }
             },
 
-            addTrys(amount) {
-                this.trys += amount;
-                // CAP health at 20 max to prevent stacking
-                if (this.trys > 20) this.trys = 20;
-                localStorage.setItem('user_trys', this.trys);
-                this.updateUI();
-                document.getElementById('refill-popup').style.display = 'none';
-
-                Hacking.showToast(`+${amount} Trys Added! Starting...`);
-                setTimeout(() => Hacking.hideToast(), 1500);
-
-                // AUTO-ENTER TOURNAMENT (Refresh Game State)
-                setTimeout(() => {
-                    Game.resetToGame();
-                }, 1000);
+            // Watch 1 Ad = +20 health (server-validated)
+            watchAd() {
+                AdManager.showRewardVideoAd().then(async (success) => {
+                    if (success) {
+                        const userId = localStorage.getItem('tc_user_id');
+                        try {
+                            const res = await fetch(`${SERVER_URL}/api/health/ad-reward`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ userId })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                this.setHealth(data.health);
+                            }
+                        } catch (e) {
+                            // Fallback: give health locally
+                            this.setHealth(20);
+                        }
+                        document.getElementById('refill-popup').style.display = 'none';
+                        Hacking.showToast('+20 Health Added! Starting...');
+                        setTimeout(() => Hacking.hideToast(), 1500);
+                        setTimeout(() => Game.resetToGame(), 1000);
+                    }
+                });
             }
         };
 
@@ -921,6 +1080,25 @@
                         const timeStr = `${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
                         Hacking.elements.displayTimer.innerText = timeStr;
                     }
+                });
+
+                // Server health events (anti-cheat)
+                socket.on('no_health', () => {
+                    TrysManager.setHealth(0);
+                    // Reset Hacking state back to IDLE (server rejected the 'st')
+                    if (Hacking.state === 'RUNNING') {
+                        Hacking.state = 'IDLE';
+                        Hacking.elements.btn.innerText = "START";
+                        Hacking.elements.btn.className = "btn start";
+                        Hacking.elements.btn.disabled = false;
+                        Hacking.elements.status.innerText = "No health!";
+                        Hacking.elements.displayTimer.innerText = "00.000";
+                        Hacking.elements.timerBox.classList.remove('timer-active');
+                    }
+                    TrysManager.showRefillPopup();
+                });
+                socket.on('health_update', (data) => {
+                    TrysManager.setHealth(data.health);
                 });
 
                 socket.on('gr', (data) => {
@@ -1235,6 +1413,48 @@
                 }
             }
         };
+
+        // --- TOP SCORES FEATURE ---
+        async function fetchTopScores() {
+            const listEl = document.getElementById('top-scores-list');
+            if (!listEl) return;
+            listEl.innerHTML = '<div class="ts-empty">Loading...</div>';
+
+            try {
+                const userId = localStorage.getItem('tc_user_id') || '';
+                const res = await fetch(`${SERVER_URL}/api/tournament-top-scores?count=10&userId=${encodeURIComponent(userId)}`);
+                const data = await res.json();
+
+                if (!data.scores || data.scores.length === 0) {
+                    listEl.innerHTML = '<div class="ts-empty">No scores yet. Be the first!</div>';
+                    return;
+                }
+
+                const medals = ['🥇','🥈','🥉'];
+                listEl.innerHTML = data.scores.map(p => {
+                    const medal = medals[p.rank - 1] || `#${p.rank}`;
+                    const scoreStr = p.score + 'ms';
+                    return `
+                        <div class="ts-row ${p.isYou ? 'is-you' : ''}">
+                            <div class="ts-rank">${medal}</div>
+                            <div class="ts-name">${p.isYou ? '👤 ' : ''}${p.name}</div>
+                            <div class="ts-score">${scoreStr}</div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                listEl.innerHTML = '<div class="ts-empty">Failed to load. Try again.</div>';
+            }
+        }
+
+        function openTopScores() {
+            document.getElementById('top-scores-popup').style.display = 'flex';
+            fetchTopScores();
+        }
+
+        function closeTopScores() {
+            document.getElementById('top-scores-popup').style.display = 'none';
+        }
 
         Game.init();
 

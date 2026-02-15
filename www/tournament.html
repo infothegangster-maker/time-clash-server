@@ -507,6 +507,7 @@
         let nextScheduledTournament = null;
         let scheduledCountdownInterval = null;
         let initialCardHTML = ''; // Store initial lobby HTML
+        let _waitingForTu = false; // Flag: after leaderboard ends, wait for authoritative 'tu' before trusting 'grd'
 
         // Capture initial HTML for restoration
         document.addEventListener('DOMContentLoaded', () => {
@@ -566,6 +567,14 @@
             });
 
             socket.on('grd', (data) => {
+                // After leaderboard ends, ignore grd 'playing' responses to prevent flash
+                // Wait for authoritative 'tu' broadcast instead
+                if (_waitingForTu && data.ph === 'p') {
+                    console.log('⏳ [GRD] Ignoring playing phase — waiting for tu broadcast');
+                    return;
+                }
+                _waitingForTu = false; // Clear flag once we process a valid grd
+
                 // Check for explicit "No Tournament" flag OR Phase 'n'
                 if (data.noTournament || !data.tid || data.ph === 'n') {
                     toast.style.display = 'none';
@@ -620,6 +629,7 @@
             // REAL-TIME TOURNAMENT UPDATE - Server broadcasts when phase changes
             socket.on('tu', (data) => {
                 console.log('📡 [LIVE UPDATE] Phase:', data.ph, 'TID:', data.tid);
+                _waitingForTu = false; // Authoritative broadcast received
 
                 if (data.ph === 'n' || !data.tid) {
                     // NO TOURNAMENT
@@ -646,12 +656,25 @@
                     startLeaderboardCountdown(data.ltl || 0);
                 } else if (data.ph === 'p') {
                     // PLAYING PHASE - New tournament started!
-                    restoreLobbyUI(); // Restore UI if coming from Leaderboard
+                    restoreLobbyUI();
                     hasActiveTournament = true;
                     stopScheduledCountdown();
-                    TrysManager.renderActionKey(true);
-                    if (data.tl && data.tl > 0) {
-                        startRealTimer(data.tl);
+                    // Don't start timer yet — re-emit 'ig' to get FULL data (rewards, etc.)
+                    // The grd response will properly render everything
+                    const cd = document.getElementById('countdown');
+                    if (cd) {
+                        cd.innerHTML = `
+                            <div style="text-align:center; padding:20px; width:100%;">
+                                <div style="display:inline-block; width:28px; height:28px; border:3px solid rgba(255,255,255,0.1); border-top-color:#a78bfa; border-radius:50%; animation:spin 0.8s linear infinite; margin-bottom:8px;"></div>
+                                <div style="font-size:0.9rem; color:#a78bfa; font-weight:600;">Loading Tournament...</div>
+                            </div>`;
+                    }
+                    TrysManager.renderActionKey(false); // Hide button until grd arrives
+                    if (socket && socket.connected) {
+                        const _uid = localStorage.getItem('tc_user_id');
+                        const _email = localStorage.getItem('tc_email');
+                        const _uname = localStorage.getItem('tc_username');
+                        socket.emit('ig', { u: _uid, e: _email, n: _uname, t: '', m: 't' });
                     }
                 }
             });
@@ -851,7 +874,8 @@
                 const s = secondsRemaining % 60;
 
                 if (secondsRemaining <= 0) {
-                    // Leaderboard time over - re-emit ig for fresh data instead of full page reload
+                    // Leaderboard time over — set flag to wait for authoritative 'tu' broadcast
+                    _waitingForTu = true;
                     window.isInLeaderboardPhase = false;
                     display.innerHTML = `
                         <button class="back-btn" onclick="window.location.href='home.html'"
@@ -861,6 +885,8 @@
                             <div style="font-size:1rem; color:#FFD700; font-weight:600;">Loading Next Tournament...</div>
                         </div>
                     `;
+                    // Safety: clear _waitingForTu after 8s if no tu broadcast arrived
+                    setTimeout(() => { _waitingForTu = false; }, 8000);
                     const _refreshAfterLeaderboard = () => {
                         if (socket && socket.connected) {
                             const _uid = localStorage.getItem('tc_user_id');
@@ -871,8 +897,9 @@
                             window.location.reload();
                         }
                     };
-                    setTimeout(_refreshAfterLeaderboard, 1500);
-                    setTimeout(() => { if (!hasActiveTournament) _refreshAfterLeaderboard(); }, 5000);
+                    // Delay ig re-emit to 3s to let tu broadcast arrive first
+                    setTimeout(_refreshAfterLeaderboard, 3000);
+                    setTimeout(() => { if (!hasActiveTournament) _refreshAfterLeaderboard(); }, 6000);
                     return;
                 }
 
@@ -2148,7 +2175,6 @@
                     const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
                     const diffMs = g.diff;
-                    const isGood = diffMs < 100;
                     const diffColor = diffMs === 0 ? '#22c55e' : diffMs < 50 ? '#4ade80' : diffMs < 200 ? '#fbbf24' : '#f87171';
                     const rankStr = g.rank ? `#${g.rank}` : '-';
                     const targetSec = (g.target / 1000).toFixed(1);
@@ -2162,7 +2188,7 @@
                     ">
                         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
                             <div style="display:flex; align-items:center; gap:8px;">
-                                <span style="font-size:1.2rem;">${g.newRecord ? '⭐' : '🎮'}</span>
+                                <span style="font-size:1.2rem;">🏆</span>
                                 <div>
                                     <div style="color:#fff; font-weight:700; font-size:0.9rem;">${actualSec}s</div>
                                     <div style="color:#64748b; font-size:0.65rem;">Target: ${targetSec}s</div>
@@ -2170,12 +2196,12 @@
                             </div>
                             <div style="text-align:right;">
                                 <div style="color:${diffColor}; font-weight:800; font-size:1.1rem; font-family:'Teko',sans-serif; letter-spacing:1px;">${diffMs}ms</div>
-                                <div style="color:#64748b; font-size:0.6rem;">difference</div>
+                                <div style="color:#64748b; font-size:0.6rem;">best diff</div>
                             </div>
                         </div>
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                             <span style="background:rgba(255,215,0,0.1); color:#FFD700; padding:2px 8px; border-radius:6px; font-weight:700; font-size:0.7rem;">Rank ${rankStr}</span>
-                            ${g.newRecord ? '<span style="background:rgba(34,197,94,0.12); color:#4ade80; padding:2px 8px; border-radius:6px; font-size:0.65rem; font-weight:600;">NEW BEST</span>' : ''}
+                            <span style="background:rgba(34,197,94,0.12); color:#4ade80; padding:2px 8px; border-radius:6px; font-size:0.65rem; font-weight:600;">BEST</span>
                             <span style="color:#475569; font-size:0.65rem; margin-left:auto;">${dateStr} ${timeStr}</span>
                         </div>
                     </div>`;
