@@ -425,8 +425,28 @@ fastify.post('/api/admin/tournament/daily-schedule', async (req, reply) => {
 
         console.log(`📆 Daily Tournament Schedule Added: ${time} (Play: ${playTime}min, Leaderboard: ${leaderboardTime}min)`);
 
+        // Also persist reward configs to Supabase if rewards present
+        if (supabase && rewards && rewards.length > 0) {
+            try {
+                const inserts = rewards.map((r, idx) => ({
+                    schedule_id: schedule.id,
+                    name: r.name,
+                    image_url: r.img || null,
+                    reward_type: r.reward_type || 'default',
+                    link_url: r.link_url || null,
+                    min_rank: parseInt(r.min),
+                    max_rank: parseInt(r.max),
+                    sort_order: idx
+                }));
+                await supabase.from('tournament_reward_configs').delete().eq('schedule_id', schedule.id);
+                await supabase.from('tournament_reward_configs').insert(inserts);
+                console.log(`🎁 [DAILY] Saved ${inserts.length} reward configs to Supabase for ${schedule.id}`);
+            } catch (e) { console.error("⚠️ Error saving daily reward configs to Supabase:", e.message); }
+        }
+
         return {
             success: true,
+            scheduleId: schedule.id,
             schedule: schedule
         };
     } catch (e) {
@@ -542,13 +562,11 @@ fastify.post('/api/admin/reward-configs', async (req, reply) => {
         // Validate reward tiers
         for (const r of rewards) {
             if (!r.name || r.min === undefined || r.max === undefined) {
-                return { error: 'Each reward needs: name, min, max. Optional: img, reward_type, reward_link' };
+                return { error: 'Each reward needs: name, min, max. Optional: img' };
             }
             if (parseInt(r.min) > parseInt(r.max)) {
                 return { error: `Invalid rank range: min(${r.min}) > max(${r.max})` };
             }
-            // Default reward_type
-            if (!r.reward_type) r.reward_type = 'generic';
         }
 
         // 1. Save to Redis (for active tournament use)
@@ -573,16 +591,16 @@ fastify.post('/api/admin/reward-configs', async (req, reply) => {
 
         // 2. Save to Supabase (persistent storage)
         if (supabase) {
-            // Delete existing configs for this schedule
+            // Delete existing configs for this schedule (cascades to redeem codes)
             await supabase.from('tournament_reward_configs').delete().eq('schedule_id', schedule_id);
 
-            // Insert new configs
+            // Insert new configs with reward_type support
             const inserts = rewards.map((r, idx) => ({
                 schedule_id: schedule_id,
                 name: r.name,
                 image_url: r.img || null,
-                reward_type: r.reward_type || 'generic',
-                reward_link: r.reward_link || null,
+                reward_type: r.reward_type || 'default',
+                link_url: r.link_url || null,
                 min_rank: parseInt(r.min),
                 max_rank: parseInt(r.max),
                 sort_order: idx
@@ -732,6 +750,10 @@ fastify.post('/api/admin/setup-reward-tables', async (req, reply) => {
             tables: ['user_rewards', 'tournament_reward_configs'],
             needsColumnFix,
             sql: `
+-- STEP 0: Drop dependent tables first (foreign key order matters)
+DROP TABLE IF EXISTS physical_reward_orders;
+DROP TABLE IF EXISTS reward_redeem_codes;
+
 -- STEP 1: Drop and recreate user_rewards with reward types support
 DROP TABLE IF EXISTS user_rewards;
 CREATE TABLE user_rewards (
@@ -740,25 +762,26 @@ CREATE TABLE user_rewards (
     tournament_id TEXT NOT NULL,
     reward_name TEXT NOT NULL,
     reward_image TEXT,
-    reward_type TEXT DEFAULT 'generic',
+    reward_type TEXT DEFAULT 'default',
     redeem_code TEXT,
-    claim_data JSONB,
+    link_url TEXT,
     rank_achieved INTEGER NOT NULL,
     is_claimed BOOLEAN DEFAULT FALSE,
+    claim_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_user_rewards_user ON user_rewards(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_rewards_tournament ON user_rewards(tournament_id);
 
--- STEP 2: Create reward configs table with reward_type support
+-- STEP 2: Create reward configs table with reward type support
 DROP TABLE IF EXISTS tournament_reward_configs;
 CREATE TABLE tournament_reward_configs (
     id BIGSERIAL PRIMARY KEY,
     schedule_id TEXT NOT NULL,
     name TEXT NOT NULL,
     image_url TEXT,
-    reward_type TEXT DEFAULT 'generic',
-    reward_link TEXT,
+    reward_type TEXT DEFAULT 'default',
+    link_url TEXT,
     min_rank INTEGER NOT NULL,
     max_rank INTEGER NOT NULL,
     sort_order INTEGER DEFAULT 0,
@@ -766,10 +789,24 @@ CREATE TABLE tournament_reward_configs (
 );
 CREATE INDEX IF NOT EXISTS idx_reward_configs_schedule ON tournament_reward_configs(schedule_id);
 
--- STEP 3: Physical reward orders table
-CREATE TABLE IF NOT EXISTS physical_reward_orders (
+-- STEP 3: Redeem codes pool (pre-assigned codes per reward config)
+CREATE TABLE reward_redeem_codes (
     id BIGSERIAL PRIMARY KEY,
-    reward_id BIGINT REFERENCES user_rewards(id),
+    config_id BIGINT REFERENCES tournament_reward_configs(id) ON DELETE CASCADE,
+    schedule_id TEXT NOT NULL,
+    rank_position INTEGER NOT NULL,
+    code TEXT NOT NULL,
+    assigned_to TEXT,
+    assigned_tournament TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_redeem_codes_config ON reward_redeem_codes(config_id);
+CREATE INDEX IF NOT EXISTS idx_redeem_codes_schedule ON reward_redeem_codes(schedule_id);
+
+-- STEP 4: Physical reward orders
+CREATE TABLE physical_reward_orders (
+    id BIGSERIAL PRIMARY KEY,
+    user_reward_id BIGINT REFERENCES user_rewards(id),
     user_id TEXT NOT NULL,
     full_name TEXT NOT NULL,
     phone TEXT NOT NULL,
@@ -779,25 +816,9 @@ CREATE TABLE IF NOT EXISTS physical_reward_orders (
     pincode TEXT NOT NULL,
     status TEXT DEFAULT 'pending',
     admin_notes TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_physical_orders_user ON physical_reward_orders(user_id);
-CREATE INDEX IF NOT EXISTS idx_physical_orders_status ON physical_reward_orders(status);
-
--- STEP 4: Game history table
-CREATE TABLE IF NOT EXISTS game_history (
-    id BIGSERIAL PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    tournament_id TEXT NOT NULL,
-    score INTEGER NOT NULL,
-    rank_achieved INTEGER,
-    target_time INTEGER,
-    player_time INTEGER,
-    is_win BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_game_history_user ON game_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_physical_orders_user ON physical_reward_orders(user_id);
             `
         };
     } catch (e) {
@@ -876,7 +897,7 @@ fastify.get('/api/tournament-rewards', async (req, reply) => {
                         .order('sort_order');
 
                     if (data && data.length > 0) {
-                        rewards = data.map(r => ({ name: r.name, img: r.image_url, min: r.min_rank, max: r.max_rank }));
+                        rewards = data.map(r => ({ name: r.name, img: r.image_url, min: r.min_rank, max: r.max_rank, reward_type: r.reward_type || 'default', link_url: r.link_url || null }));
                         // Cache back to Redis
                         await redis.hset(`tournament:info:${currentTournamentKey}`, { rewards: JSON.stringify(rewards) });
                         console.log(`🎁 [REWARDS] Loaded ${rewards.length} from Supabase for schedule ${scheduleId}`);
@@ -935,59 +956,50 @@ fastify.post('/api/claim-reward', async (req, reply) => {
         }
 
         // First fetch the reward to check its type
-        const { data: rewardData, error: fetchError } = await supabase
+        const { data: existing, error: fetchErr } = await supabase
             .from('user_rewards')
             .select('*')
             .eq('id', rewardId)
             .single();
 
-        if (fetchError || !rewardData) {
+        if (fetchErr || !existing) {
             return { error: 'Reward not found' };
         }
 
-        if (rewardData.is_claimed) {
-            return { success: true, reward: rewardData, alreadyClaimed: true };
+        if (existing.is_claimed) {
+            return { success: true, reward: existing, message: 'Already claimed' };
         }
 
-        const rewardType = rewardData.reward_type || 'generic';
+        const rewardType = existing.reward_type || 'default';
 
-        // Handle physical_reward_order: require shipping data
-        if (rewardType === 'physical_reward_order' && shippingData) {
-            const { full_name, phone, address, city, state, pincode } = shippingData;
-            if (!full_name || !phone || !address || !city || !state || !pincode) {
-                return { error: 'All shipping fields are required for physical rewards' };
-            }
-
-            // Save order
-            const { error: orderError } = await supabase
+        // For physical_reward, require shipping data
+        if (rewardType === 'physical_reward' && shippingData) {
+            // Save physical reward order
+            const { error: orderErr } = await supabase
                 .from('physical_reward_orders')
                 .insert({
-                    reward_id: rewardId,
-                    user_id: rewardData.user_id,
-                    full_name, phone, address, city, state, pincode,
-                    status: 'pending'
+                    user_reward_id: existing.id,
+                    user_id: existing.user_id,
+                    full_name: shippingData.fullName,
+                    phone: shippingData.phone,
+                    address: shippingData.address,
+                    city: shippingData.city,
+                    state: shippingData.state,
+                    pincode: shippingData.pincode
                 });
-
-            if (orderError) {
-                console.error("❌ Error creating physical order:", orderError);
-                return { error: 'Failed to save shipping details' };
+            if (orderErr) {
+                console.error("❌ Error saving physical reward order:", orderErr);
+                // Don't block claim if order table missing
             }
-
-            // Update claim_data with shipping info
-            await supabase
-                .from('user_rewards')
-                .update({ is_claimed: true, claim_data: { shipping: shippingData, order_status: 'pending' } })
-                .eq('id', rewardId);
-
-            console.log(`✅ [PHYSICAL ORDER] Reward ${rewardId} claimed with shipping data`);
-            const { data: updated } = await supabase.from('user_rewards').select('*').eq('id', rewardId).single();
-            return { success: true, reward: updated };
         }
 
-        // For all other types: just mark as claimed
+        // Mark as claimed, store claim_data if provided
+        const updateData = { is_claimed: true };
+        if (shippingData) updateData.claim_data = shippingData;
+
         const { data, error } = await supabase
             .from('user_rewards')
-            .update({ is_claimed: true })
+            .update(updateData)
             .eq('id', rewardId)
             .select();
 
@@ -1008,149 +1020,108 @@ fastify.post('/api/claim-reward', async (req, reply) => {
     }
 });
 
-// Get user game history (last 5 games)
+// Save redeem codes for a reward config (admin)
+fastify.post('/api/admin/redeem-codes', async (req, reply) => {
+    try {
+        const { schedule_id, config_id, codes } = req.body;
+        if (!schedule_id || !codes || !Array.isArray(codes)) {
+            return { error: 'schedule_id and codes array required' };
+        }
+        if (!supabase) return { error: 'Database not configured' };
+
+        // Delete existing codes for this config/schedule
+        if (config_id) {
+            await supabase.from('reward_redeem_codes').delete().eq('config_id', config_id);
+        } else {
+            await supabase.from('reward_redeem_codes').delete().eq('schedule_id', schedule_id);
+        }
+
+        // Insert new codes: codes = [{ rank_position: 1, code: "ABC123" }, ...]
+        const inserts = codes.map(c => ({
+            config_id: config_id || null,
+            schedule_id,
+            rank_position: c.rank_position,
+            code: c.code
+        }));
+
+        const { error } = await supabase.from('reward_redeem_codes').insert(inserts);
+        if (error) {
+            console.error("❌ Error saving redeem codes:", error);
+            return { error: error.message };
+        }
+
+        return { success: true, count: inserts.length };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Get redeem codes for a schedule (admin)
+fastify.get('/api/admin/redeem-codes/:scheduleId', async (req, reply) => {
+    try {
+        if (!supabase) return { error: 'Database not configured', codes: [] };
+        const { data, error } = await supabase
+            .from('reward_redeem_codes')
+            .select('*')
+            .eq('schedule_id', req.params.scheduleId)
+            .order('rank_position');
+        if (error) return { error: error.message, codes: [] };
+        return { codes: data || [] };
+    } catch (e) {
+        return { error: e.message, codes: [] };
+    }
+});
+
+// Get physical reward orders (admin)
+fastify.get('/api/admin/physical-orders', async (req, reply) => {
+    try {
+        if (!supabase) return { error: 'Database not configured', orders: [] };
+        const { data, error } = await supabase
+            .from('physical_reward_orders')
+            .select('*, user_rewards(reward_name, reward_image, tournament_id)')
+            .order('created_at', { ascending: false })
+            .limit(100);
+        if (error) return { error: error.message, orders: [] };
+        return { orders: data || [] };
+    } catch (e) {
+        return { error: e.message, orders: [] };
+    }
+});
+
+// Update physical reward order status (admin)
+fastify.post('/api/admin/physical-orders/:orderId/status', async (req, reply) => {
+    try {
+        if (!supabase) return { error: 'Database not configured' };
+        const { status, admin_notes } = req.body;
+        const { data, error } = await supabase
+            .from('physical_reward_orders')
+            .update({ status, admin_notes })
+            .eq('id', req.params.orderId)
+            .select();
+        if (error) return { error: error.message };
+        return { success: true, order: data?.[0] };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Get user's game history (last 5 games)
 fastify.get('/api/user-game-history', async (req, reply) => {
     try {
         const userId = req.query.userId;
-        if (!userId) return { error: 'userId required', history: [] };
-        if (!supabase) return { history: [] };
+        if (!userId) return { error: 'userId required', games: [] };
 
-        const { data, error } = await supabase
-            .from('game_history')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(5);
+        // Check Redis for recent game results stored per user
+        const historyKey = `user:games:${userId}`;
+        const rawHistory = await redis.lrange(historyKey, 0, 4);
 
-        if (error) {
-            console.error("❌ Error fetching game history:", error);
-            return { history: [] };
-        }
+        const games = rawHistory.map(x => {
+            try { return JSON.parse(x); } catch { return null; }
+        }).filter(Boolean);
 
-        return { history: data || [] };
+        return { games };
     } catch (e) {
-        return { history: [] };
-    }
-});
-
-// Save game result to history
-fastify.post('/api/save-game-result', async (req, reply) => {
-    try {
-        const { userId, tournamentId, score, rank, targetTime, playerTime, isWin } = req.body;
-        if (!userId || !tournamentId) return { error: 'userId and tournamentId required' };
-        if (!supabase) return { success: false };
-
-        const { error } = await supabase.from('game_history').insert({
-            user_id: userId,
-            tournament_id: tournamentId,
-            score: score || 0,
-            rank_achieved: rank || null,
-            target_time: targetTime || null,
-            player_time: playerTime || null,
-            is_win: isWin || false
-        });
-
-        if (error) {
-            console.error("❌ Error saving game history:", error);
-            return { success: false };
-        }
-        return { success: true };
-    } catch (e) {
-        return { success: false };
-    }
-});
-
-// Get physical reward order status
-fastify.get('/api/order-status', async (req, reply) => {
-    try {
-        const rewardId = req.query.rewardId;
-        if (!rewardId || !supabase) return { order: null };
-
-        const { data } = await supabase
-            .from('physical_reward_orders')
-            .select('*')
-            .eq('reward_id', rewardId)
-            .single();
-
-        return { order: data || null };
-    } catch (e) {
-        return { order: null };
-    }
-});
-
-// Admin: Get all physical reward orders
-fastify.get('/api/admin/physical-orders', async (req, reply) => {
-    try {
-        if (!supabase) return { orders: [] };
-
-        const status = req.query.status || null;
-        let query = supabase
-            .from('physical_reward_orders')
-            .select('*, user_rewards(reward_name, reward_image, tournament_id)')
-            .order('created_at', { ascending: false });
-
-        if (status) query = query.eq('status', status);
-
-        const { data, error } = await query;
-        if (error) return { orders: [], error: error.message };
-        return { orders: data || [] };
-    } catch (e) {
-        return { orders: [] };
-    }
-});
-
-// Admin: Update physical order status
-fastify.post('/api/admin/update-order-status', async (req, reply) => {
-    try {
-        const { orderId, status, adminNotes } = req.body;
-        if (!orderId || !status || !supabase) return { error: 'orderId and status required' };
-
-        const updateData = { status, updated_at: new Date().toISOString() };
-        if (adminNotes) updateData.admin_notes = adminNotes;
-
-        const { data, error } = await supabase
-            .from('physical_reward_orders')
-            .update(updateData)
-            .eq('id', orderId)
-            .select();
-
-        if (error) return { error: error.message };
-
-        // Also update claim_data in user_rewards
-        if (data && data[0]) {
-            await supabase
-                .from('user_rewards')
-                .update({ claim_data: { order_status: status, admin_notes: adminNotes || '' } })
-                .eq('id', data[0].reward_id);
-        }
-
-        return { success: true };
-    } catch (e) {
-        return { error: e.message };
-    }
-});
-
-// Admin: Set redeem codes for a reward config (batch assign codes to winners)
-fastify.post('/api/admin/set-redeem-codes', async (req, reply) => {
-    try {
-        const { tournamentId, codes } = req.body;
-        // codes = [{ userId, code }]
-        if (!tournamentId || !codes || !supabase) return { error: 'tournamentId and codes required' };
-
-        let updated = 0;
-        for (const entry of codes) {
-            const { error } = await supabase
-                .from('user_rewards')
-                .update({ redeem_code: entry.code })
-                .eq('tournament_id', tournamentId)
-                .eq('user_id', entry.userId);
-
-            if (!error) updated++;
-        }
-
-        return { success: true, updated };
-    } catch (e) {
-        return { error: e.message };
+        return { error: e.message, games: [] };
     }
 });
 
@@ -1208,8 +1179,8 @@ async function createTournamentFromSchedule(schedule, scheduleType, scheduleId) 
                     img: r.image_url,
                     min: r.min_rank,
                     max: r.max_rank,
-                    reward_type: r.reward_type || 'generic',
-                    reward_link: r.reward_link || null
+                    reward_type: r.reward_type || 'default',
+                    link_url: r.link_url || null
                 }));
                 console.log(`🎁 [REWARDS] Loaded ${rewardsToStore.length} reward tiers from Supabase for ${scheduleId}`);
             }
@@ -2144,7 +2115,7 @@ function startTournamentCheck() {
                         return {
                             ...w,
                             rank: rank,
-                            reward: matchedReward ? { name: matchedReward.name, img: matchedReward.img } : null
+                            reward: matchedReward ? { name: matchedReward.name, img: matchedReward.img, reward_type: matchedReward.reward_type || 'default' } : null
                         };
                     });
 
@@ -2160,18 +2131,53 @@ function startTournamentCheck() {
                     // 🎁 DISTRIBUTE REWARDS TO SUPABASE NOW (Redis data is fresh during p→l)
                     if (rewardsConfig.length > 0 && supabase) {
                         try {
+                            // Pre-fetch redeem codes for this tournament's schedule
+                            let redeemCodesMap = {};
+                            const scheduleId = await redis.hget(`tournament:info:${currentTournamentKey}`, 'schedule_id');
+                            if (scheduleId) {
+                                try {
+                                    const { data: codes } = await supabase
+                                        .from('reward_redeem_codes')
+                                        .select('*')
+                                        .eq('schedule_id', scheduleId)
+                                        .is('assigned_to', null)
+                                        .order('rank_position');
+                                    if (codes) {
+                                        codes.forEach(c => {
+                                            if (!redeemCodesMap[c.rank_position]) redeemCodesMap[c.rank_position] = [];
+                                            redeemCodesMap[c.rank_position].push(c);
+                                        });
+                                    }
+                                } catch (e) { /* redeem codes table may not exist */ }
+                            }
+
                             const rewardInserts = [];
+                            const codeAssignments = []; // track code assignments
                             for (let i = 0; i < allWinners.length; i++) {
                                 const rank = i + 1;
                                 const player = allWinners[i];
                                 const matchingReward = rewardsConfig.find(r => rank >= parseInt(r.min) && rank <= parseInt(r.max));
                                 if (matchingReward) {
-                                    console.log(`   🎁 Rank ${rank} (${player.n}) → ${matchingReward.name}`);
+                                    const rewardType = matchingReward.reward_type || 'default';
+                                    let redeemCode = null;
+                                    let linkUrl = matchingReward.link_url || null;
+
+                                    // Assign redeem code if reward type is redeem_code
+                                    if (rewardType === 'redeem_code' && redeemCodesMap[rank] && redeemCodesMap[rank].length > 0) {
+                                        const codeEntry = redeemCodesMap[rank].shift();
+                                        redeemCode = codeEntry.code;
+                                        codeAssignments.push({ id: codeEntry.id, userId: player.u });
+                                    }
+
+                                    console.log(`   🎁 Rank ${rank} (${player.n}) → ${matchingReward.name} [${rewardType}]${redeemCode ? ' code:***' : ''}`);
                                     rewardInserts.push({
                                         user_id: player.u,
                                         tournament_id: currentTournamentKey,
                                         reward_name: matchingReward.name,
                                         reward_image: matchingReward.img || null,
+                                        reward_type: rewardType,
+                                        redeem_code: redeemCode,
+                                        link_url: linkUrl,
                                         rank_achieved: rank,
                                         is_claimed: false
                                     });
@@ -2190,6 +2196,15 @@ function startTournamentCheck() {
                                 } else {
                                     console.log(`✅ [REWARDS DISTRIBUTED] ${rewardInserts.length} rewards saved to Supabase user_rewards!`);
                                     if (insertedData) console.log(`   IDs: ${insertedData.map(r => r.id).join(', ')}`);
+                                }
+
+                                // Mark assigned redeem codes
+                                for (const ca of codeAssignments) {
+                                    try {
+                                        await supabase.from('reward_redeem_codes')
+                                            .update({ assigned_to: ca.userId, assigned_tournament: currentTournamentKey })
+                                            .eq('id', ca.id);
+                                    } catch (e) { /* ignore */ }
                                 }
                             } else {
                                 console.log(`ℹ️ [REWARDS] No matching rewards for any winners`);
@@ -2310,6 +2325,8 @@ async function endTournament(oldKey) {
                                     tournament_id: oldKey,
                                     reward_name: matchingReward.name,
                                     reward_image: matchingReward.img || null,
+                                    reward_type: matchingReward.reward_type || 'default',
+                                    link_url: matchingReward.link_url || null,
                                     rank_achieved: rank,
                                     is_claimed: false
                                 });
@@ -2840,6 +2857,26 @@ io.on('connection', (socket) => {
 
         // Use Cached Leaderboard
         const optimizedLeaders = cachedTop3.map(p => ({ u: p.user, s: p.score }));
+
+        // Save game to user's history (last 5 games)
+        if (session.userId && session.mode === 't') {
+            try {
+                const gameEntry = JSON.stringify({
+                    ts: Date.now(),
+                    diff: diff,
+                    time: serverDuration,
+                    target: target,
+                    rank: rank,
+                    win: win ? 1 : 0,
+                    newRecord: newRecord ? 1 : 0,
+                    tid: currentTournamentId
+                });
+                const historyKey = `user:games:${session.userId}`;
+                await redis.lpush(historyKey, gameEntry);
+                await redis.ltrim(historyKey, 0, 4); // Keep only last 5
+                await redis.expire(historyKey, 86400 * 7); // 7 days TTL
+            } catch (e) { /* ignore history save errors */ }
+        }
 
         socket.emit('gr', {
             w: win ? 1 : 0,
