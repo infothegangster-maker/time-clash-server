@@ -1278,7 +1278,7 @@ fastify.get('/api/physical-order-status', async (req, reply) => {
         if (!rewardId || !supabase) return { order: null };
         const { data, error } = await supabase
             .from('physical_reward_orders')
-            .select('id, order_status, tracking_link, created_at')
+            .select('id, order_status, tracking_link, full_name, phone, address, city, state, pincode, created_at')
             .eq('user_reward_id', rewardId)
             .single();
         if (error) return { order: null };

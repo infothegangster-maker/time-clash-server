@@ -1633,65 +1633,122 @@
     </div>
 
     <!-- ==================== TRACKING INFO POPUP ==================== -->
-    <div id="tracking-modal" style="display:none; position:fixed; inset:0; z-index:30000; justify-content:center; align-items:center; background:rgba(0,0,0,0.92); backdrop-filter:blur(12px);">
+    <div id="tracking-modal" style="display:none; position:fixed; inset:0; z-index:30000; justify-content:center; align-items:center; background:rgba(0,0,0,0.94); backdrop-filter:blur(16px);">
         <div style="
             background: linear-gradient(145deg, #1e293b, #0f172a);
-            border: 1px solid rgba(59,130,246,0.2);
-            width:92%; max-width:400px;
-            border-radius:24px;
-            box-shadow: 0 0 60px rgba(59,130,246,0.06), 0 25px 50px rgba(0,0,0,0.5);
+            border: 1.5px solid rgba(59,130,246,0.2);
+            width:94%; max-width:440px; max-height:92vh; overflow-y:auto;
+            border-radius:28px;
+            box-shadow: 0 0 80px rgba(59,130,246,0.08), 0 30px 60px rgba(0,0,0,0.6);
             animation: modalSlideIn 0.35s cubic-bezier(0.16,1,0.3,1);
-            padding:28px 24px; overflow:hidden; text-align:center;
+            padding:30px 26px 24px; text-align:center;
+            scrollbar-width:thin; scrollbar-color:#475569 transparent;
         ">
-            <div style="font-size:2.5rem; margin-bottom:8px;">📦</div>
-            <h2 style="margin:0 0 4px; color:#60a5fa; font-family:'Teko',sans-serif; font-size:1.5rem; letter-spacing:1px;">ORDER STATUS</h2>
-            <div id="tracking-reward-name" style="color:#94a3b8; font-size:0.8rem; margin-bottom:16px;"></div>
-
-            <div id="tracking-status-area" style="margin-bottom:20px;">
-                <div style="display:inline-block; width:24px; height:24px; border:3px solid #475569; border-top-color:#60a5fa; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
-                <div style="color:#94a3b8; font-size:0.85rem; margin-top:8px;">Loading...</div>
+            <!-- Header -->
+            <div style="margin-bottom:6px;">
+                <h2 style="margin:0; color:#60a5fa; font-family:'Teko',sans-serif; font-size:2.4rem; letter-spacing:2px; line-height:1;">YOUR ORDER</h2>
             </div>
 
-            <div id="tracking-contact-area" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.06);">
-                <div style="color:#64748b; font-size:0.7rem; margin-bottom:8px;">Need help with your order?</div>
+            <!-- Reward Card with Image -->
+            <div id="tracking-reward-card" style="margin:14px 0 18px; padding:16px; background:linear-gradient(135deg,rgba(59,130,246,0.08),rgba(168,85,247,0.06)); border:1.5px solid rgba(59,130,246,0.15); border-radius:20px;">
+                <div id="tracking-reward-img-wrap" style="display:none; margin-bottom:10px;">
+                    <img id="tracking-reward-img" src="" style="width:80px; height:80px; border-radius:16px; object-fit:cover; border:2px solid rgba(59,130,246,0.2); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+                </div>
+                <div id="tracking-reward-name" style="color:#e2e8f0; font-family:'Teko',sans-serif; font-size:1.5rem; font-weight:600; letter-spacing:1px; line-height:1.1;"></div>
+            </div>
+
+            <!-- Status Area -->
+            <div id="tracking-status-area" style="margin-bottom:16px;">
+                <div style="display:inline-block; width:28px; height:28px; border:3px solid #475569; border-top-color:#60a5fa; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+                <div style="color:#94a3b8; font-size:1rem; margin-top:10px;">Loading order status...</div>
+            </div>
+
+            <!-- Contact Area -->
+            <div id="tracking-contact-area" style="display:none; margin-top:18px; padding-top:18px; border-top:1.5px solid rgba(255,255,255,0.06);">
+                <div style="color:#94a3b8; font-size:0.85rem; margin-bottom:10px;">Need help with your order?</div>
                 <button id="tracking-whatsapp-btn" onclick="openWhatsAppContact()" style="
                     background:linear-gradient(135deg,#22c55e,#16a34a); color:white; border:none;
-                    padding:10px 20px; border-radius:12px; cursor:pointer; font-weight:700; font-size:0.85rem;
-                    box-shadow:0 4px 12px rgba(34,197,94,0.3); display:inline-flex; align-items:center; gap:8px;
+                    padding:14px 28px; border-radius:16px; cursor:pointer; font-weight:800; font-size:1rem;
+                    box-shadow:0 6px 20px rgba(34,197,94,0.3); display:inline-flex; align-items:center; gap:10px;
+                    letter-spacing:0.5px;
                 ">💬 Contact on WhatsApp</button>
             </div>
 
-            <button onclick="closeTrackingModal()" style="margin-top:16px; background:none; border:none; color:#64748b; cursor:pointer; font-size:0.85rem; padding:8px 20px;">Close</button>
+            <!-- Tip -->
+            <div style="margin-top:18px; padding:10px 14px; background:rgba(255,255,255,0.03); border-radius:12px;">
+                <div style="color:#64748b; font-size:0.8rem;">You can check this anytime from <span style="color:#60a5fa; font-weight:600;">MY WINS</span></div>
+            </div>
+
+            <button onclick="closeTrackingModal()" style="margin-top:14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:#94a3b8; cursor:pointer; font-size:0.95rem; font-weight:600; padding:12px 32px; border-radius:14px;">Close</button>
         </div>
     </div>
 
     <!-- ==================== SHIPPING DATA MODAL ==================== -->
-    <div id="shipping-modal" style="display:none; position:fixed; inset:0; z-index:30000; justify-content:center; align-items:center; background:rgba(0,0,0,0.92); backdrop-filter:blur(12px);">
+    <div id="shipping-modal" style="display:none; position:fixed; inset:0; z-index:30000; justify-content:center; align-items:center; background:rgba(0,0,0,0.94); backdrop-filter:blur(16px);">
         <div style="
             background: linear-gradient(145deg, #1e293b, #0f172a);
-            border: 1px solid rgba(255,215,0,0.15);
-            width:92%; max-width:400px;
-            border-radius:24px;
-            box-shadow: 0 0 60px rgba(255,215,0,0.06), 0 25px 50px rgba(0,0,0,0.5);
+            border: 1.5px solid rgba(255,215,0,0.2);
+            width:94%; max-width:440px; max-height:92vh; overflow-y:auto;
+            border-radius:28px;
+            box-shadow: 0 0 80px rgba(255,215,0,0.08), 0 30px 60px rgba(0,0,0,0.6);
             animation: modalSlideIn 0.35s cubic-bezier(0.16,1,0.3,1);
-            padding:24px; overflow:hidden;
+            padding:30px 26px 26px; scrollbar-width:thin; scrollbar-color:#475569 transparent;
         ">
-            <h2 style="margin:0 0 4px; color:#FFD700; font-family:'Teko',sans-serif; font-size:1.5rem; letter-spacing:1px;">📦 SHIPPING DETAILS</h2>
-            <p style="color:#94a3b8; font-size:0.75rem; margin-bottom:16px;">Enter your details to receive your physical reward</p>
-            <input type="hidden" id="ship-reward-id">
-            <div style="display:flex; flex-direction:column; gap:10px;">
-                <input id="ship-name" type="text" placeholder="Full Name" style="width:100%; padding:10px 14px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:10px; color:white; font-size:0.9rem;">
-                <input id="ship-phone" type="tel" placeholder="Phone Number" style="width:100%; padding:10px 14px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:10px; color:white; font-size:0.9rem;">
-                <input id="ship-address" type="text" placeholder="Full Address" style="width:100%; padding:10px 14px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:10px; color:white; font-size:0.9rem;">
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                    <input id="ship-city" type="text" placeholder="City" style="width:100%; padding:10px 14px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:10px; color:white; font-size:0.9rem;">
-                    <input id="ship-state" type="text" placeholder="State" style="width:100%; padding:10px 14px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:10px; color:white; font-size:0.9rem;">
-                </div>
-                <input id="ship-pincode" type="text" placeholder="Pincode" style="width:100%; padding:10px 14px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:10px; color:white; font-size:0.9rem;">
+            <!-- Header -->
+            <div style="text-align:center; margin-bottom:20px;">
+                <div style="font-size:3rem; margin-bottom:4px;">📦</div>
+                <h2 style="margin:0; color:#FFD700; font-family:'Teko',sans-serif; font-size:2.2rem; letter-spacing:2px; line-height:1;">SHIPPING DETAILS</h2>
+                <p style="color:#94a3b8; font-size:0.9rem; margin:6px 0 0;">Fill in your address to receive your reward</p>
             </div>
-            <div style="display:flex; gap:10px; margin-top:18px;">
-                <button onclick="closeShippingModal()" style="flex:1; padding:12px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:12px; color:#94a3b8; cursor:pointer; font-weight:600;">Cancel</button>
-                <button id="ship-submit-btn" onclick="submitShippingData()" style="flex:1; padding:12px; background:linear-gradient(135deg,#22c55e,#16a34a); border:none; border-radius:12px; color:white; cursor:pointer; font-weight:700; box-shadow:0 4px 12px rgba(34,197,94,0.3);">Submit & Claim</button>
+
+            <!-- Reward preview -->
+            <div id="ship-reward-preview" style="display:none; margin-bottom:18px; padding:12px 16px; background:rgba(255,215,0,0.06); border:1px solid rgba(255,215,0,0.12); border-radius:16px; display:flex; align-items:center; gap:12px;"></div>
+
+            <input type="hidden" id="ship-reward-id">
+            <input type="hidden" id="ship-reward-name-val">
+            <input type="hidden" id="ship-reward-image-val">
+
+            <div style="display:flex; flex-direction:column; gap:14px;">
+                <!-- Full Name -->
+                <div>
+                    <label style="display:block; margin-bottom:5px; color:#e2e8f0; font-size:0.95rem; font-weight:600;">Full Name <span style="color:#ef4444;">*</span></label>
+                    <input id="ship-name" type="text" placeholder="Enter your full name" style="width:100%; padding:14px 16px; background:rgba(255,255,255,0.06); border:1.5px solid rgba(255,255,255,0.12); border-radius:14px; color:white; font-size:1.05rem; font-weight:500; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor='#FFD700'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
+                </div>
+                <!-- Phone -->
+                <div>
+                    <label style="display:block; margin-bottom:5px; color:#e2e8f0; font-size:0.95rem; font-weight:600;">Phone Number <span style="color:#ef4444;">*</span></label>
+                    <input id="ship-phone" type="tel" placeholder="e.g. 9876543210" style="width:100%; padding:14px 16px; background:rgba(255,255,255,0.06); border:1.5px solid rgba(255,255,255,0.12); border-radius:14px; color:white; font-size:1.05rem; font-weight:500; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor='#FFD700'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
+                </div>
+                <!-- Address -->
+                <div>
+                    <label style="display:block; margin-bottom:5px; color:#e2e8f0; font-size:0.95rem; font-weight:600;">Full Address <span style="color:#ef4444;">*</span></label>
+                    <input id="ship-address" type="text" placeholder="House no, Street, Locality" style="width:100%; padding:14px 16px; background:rgba(255,255,255,0.06); border:1.5px solid rgba(255,255,255,0.12); border-radius:14px; color:white; font-size:1.05rem; font-weight:500; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor='#FFD700'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
+                </div>
+                <!-- City + State -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div>
+                        <label style="display:block; margin-bottom:5px; color:#e2e8f0; font-size:0.95rem; font-weight:600;">City <span style="color:#ef4444;">*</span></label>
+                        <input id="ship-city" type="text" placeholder="City" style="width:100%; padding:14px 16px; background:rgba(255,255,255,0.06); border:1.5px solid rgba(255,255,255,0.12); border-radius:14px; color:white; font-size:1.05rem; font-weight:500; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor='#FFD700'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom:5px; color:#e2e8f0; font-size:0.95rem; font-weight:600;">State <span style="color:#ef4444;">*</span></label>
+                        <input id="ship-state" type="text" placeholder="State" style="width:100%; padding:14px 16px; background:rgba(255,255,255,0.06); border:1.5px solid rgba(255,255,255,0.12); border-radius:14px; color:white; font-size:1.05rem; font-weight:500; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor='#FFD700'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
+                    </div>
+                </div>
+                <!-- Pincode -->
+                <div>
+                    <label style="display:block; margin-bottom:5px; color:#e2e8f0; font-size:0.95rem; font-weight:600;">Pincode <span style="color:#ef4444;">*</span></label>
+                    <input id="ship-pincode" type="text" placeholder="e.g. 400001" style="width:100%; padding:14px 16px; background:rgba(255,255,255,0.06); border:1.5px solid rgba(255,255,255,0.12); border-radius:14px; color:white; font-size:1.05rem; font-weight:500; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor='#FFD700'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div style="display:flex; gap:12px; margin-top:22px;">
+                <button onclick="closeShippingModal()" style="flex:0.8; padding:15px; background:rgba(255,255,255,0.06); border:1.5px solid rgba(255,255,255,0.12); border-radius:16px; color:#94a3b8; cursor:pointer; font-weight:700; font-size:1rem;">Cancel</button>
+                <button id="ship-submit-btn" onclick="submitShippingData()" style="flex:1.2; padding:15px; background:linear-gradient(135deg,#22c55e,#16a34a); border:none; border-radius:16px; color:white; cursor:pointer; font-weight:800; font-size:1.1rem; box-shadow:0 6px 20px rgba(34,197,94,0.35); letter-spacing:0.5px; position:relative; overflow:hidden;">
+                    <span style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent);animation:shineSlide 2.5s infinite;"></span>
+                    <span style="position:relative;">SUBMIT & CLAIM</span>
+                </button>
             </div>
         </div>
     </div>
@@ -2028,11 +2085,13 @@
                         let actionHtml = '';
                         if (isUnclaimed) {
                             if (rType === 'physical_reward') {
-                                actionHtml = `<button onclick="openShippingModal('${r.id}')" style="
+                                const rn = (r.reward_name||'').replace(/'/g,"\\'");
+                                const ri = (r.reward_image||'').replace(/'/g,"\\'");
+                                actionHtml = `<button onclick="openShippingModal('${r.id}','${rn}','${ri}')" style="
                                     background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border:none; padding:8px 14px;
                                     border-radius:10px; cursor:pointer; font-weight:700; font-size:0.75rem;
                                     box-shadow:0 3px 12px rgba(59,130,246,0.3); white-space:nowrap; position:relative; overflow:hidden;
-                                "><span style="position:relative;">📦 CLAIM</span></button>`;
+                                "><span style="position:relative;">📦 CLAIM & SHIP</span></button>`;
                             } else if (rType === 'physical_reward_link') {
                                 actionHtml = `<button onclick="claimAndOpenLink('${r.id}','${(r.link_url||'').replace(/'/g,"\\'")}')" style="
                                     background:linear-gradient(135deg,#f59e0b,#d97706); color:white; border:none; padding:8px 14px;
@@ -2049,7 +2108,9 @@
                         } else {
                             // CLAIMED — for physical rewards show OPEN button for tracking
                             if (rType === 'physical_reward') {
-                                actionHtml = `<button onclick="openTrackingModal('${r.id}','${(r.reward_name||'').replace(/'/g,"\\'")}')" style="
+                                const rn2 = (r.reward_name||'').replace(/'/g,"\\'");
+                                const ri2 = (r.reward_image||'').replace(/'/g,"\\'");
+                                actionHtml = `<button onclick="openTrackingModal('${r.id}','${rn2}','${ri2}')" style="
                                     background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border:none; padding:7px 12px;
                                     border-radius:10px; cursor:pointer; font-weight:700; font-size:0.7rem;
                                     box-shadow:0 2px 8px rgba(59,130,246,0.25); white-space:nowrap; display:flex; align-items:center; gap:4px;
@@ -2292,14 +2353,27 @@
         }
 
         // --- SHIPPING MODAL (Physical Rewards) ---
-        function openShippingModal(rewardId) {
+        function openShippingModal(rewardId, rewardName, rewardImage) {
             document.getElementById('ship-reward-id').value = rewardId;
+            document.getElementById('ship-reward-name-val').value = rewardName || '';
+            document.getElementById('ship-reward-image-val').value = rewardImage || '';
             document.getElementById('ship-name').value = '';
             document.getElementById('ship-phone').value = '';
             document.getElementById('ship-address').value = '';
             document.getElementById('ship-city').value = '';
             document.getElementById('ship-state').value = '';
             document.getElementById('ship-pincode').value = '';
+
+            // Show reward preview if available
+            const preview = document.getElementById('ship-reward-preview');
+            if (rewardName || rewardImage) {
+                let imgHtml = rewardImage ? `<img src="${rewardImage}" style="width:56px; height:56px; border-radius:12px; object-fit:cover; border:2px solid rgba(255,215,0,0.2); flex-shrink:0;">` : `<div style="width:56px; height:56px; border-radius:12px; background:rgba(255,215,0,0.1); display:flex; align-items:center; justify-content:center; font-size:1.8rem; flex-shrink:0;">🎁</div>`;
+                preview.innerHTML = `${imgHtml}<div style="text-align:left;"><div style="color:#FFD700; font-family:'Teko',sans-serif; font-size:1.2rem; font-weight:600; letter-spacing:0.5px; line-height:1.1;">${rewardName || 'Physical Reward'}</div><div style="color:#94a3b8; font-size:0.75rem; margin-top:2px;">Fill address below to claim</div></div>`;
+                preview.style.display = 'flex';
+            } else {
+                preview.style.display = 'none';
+            }
+
             document.getElementById('shipping-modal').style.display = 'flex';
         }
 
@@ -2309,6 +2383,8 @@
 
         async function submitShippingData() {
             const rewardId = document.getElementById('ship-reward-id').value;
+            const rewardName = document.getElementById('ship-reward-name-val').value;
+            const rewardImage = document.getElementById('ship-reward-image-val').value;
             const shippingData = {
                 fullName: document.getElementById('ship-name').value.trim(),
                 phone: document.getElementById('ship-phone').value.trim(),
@@ -2325,7 +2401,7 @@
 
             const btn = document.getElementById('ship-submit-btn');
             btn.disabled = true;
-            btn.textContent = 'Submitting...';
+            btn.querySelector('span:last-child').textContent = 'SUBMITTING...';
 
             try {
                 const res = await fetch(`${SERVER_URL}/api/claim-reward`, {
@@ -2336,10 +2412,12 @@
                 const data = await res.json();
 
                 if (data.success) {
+                    // Store shipping data for WhatsApp prefill
+                    window._lastShippingData = shippingData;
                     closeShippingModal();
                     startConfetti();
-                    showClaimToast('Physical reward claimed! We will ship it soon.');
-                    showMyWins(); // Refresh the list
+                    // Show tracking/status page directly instead of My Wins
+                    openTrackingModal(rewardId, rewardName, rewardImage);
                 } else {
                     showClaimToast('Error: ' + (data.error || 'Unknown error'), true);
                 }
@@ -2347,7 +2425,7 @@
                 showClaimToast('Network error, try again', true);
             } finally {
                 btn.disabled = false;
-                btn.textContent = 'Submit & Claim';
+                btn.querySelector('span:last-child').textContent = 'SUBMIT & CLAIM';
             }
         }
 
@@ -2380,6 +2458,8 @@
         let pendingRewardId = null;
         let pendingTournamentId = null;
         let pendingRewardType = 'default';
+        let pendingRewardName = '';
+        let pendingRewardImage = '';
         let winnerOverlayShown = false;
 
         function showWinnerOverlay(reward) {
@@ -2388,6 +2468,8 @@
 
             pendingRewardId = reward.id || null;
             pendingTournamentId = reward.tournament_id || null;
+            pendingRewardName = reward.reward_name || '';
+            pendingRewardImage = reward.reward_image || '';
             const rank = reward.rank_achieved || 1;
             const hasReward = reward.reward_name && reward.reward_name !== null;
 
@@ -2472,6 +2554,8 @@
                         if (unclaimed) {
                             pendingRewardId = unclaimed.id;
                             pendingRewardType = unclaimed.reward_type || 'default';
+                            pendingRewardName = unclaimed.reward_name || '';
+                            pendingRewardImage = unclaimed.reward_image || '';
                             console.log(`✅ Found pending reward ID: ${pendingRewardId}, type: ${pendingRewardType} (attempt ${attempt + 1})`);
                             // Update claim button text based on type
                             const claimBtn = document.getElementById('winner-claim-btn');
@@ -2507,7 +2591,7 @@
             // PHYSICAL REWARD → open shipping form instead of direct claim
             if (pendingRewardType === 'physical_reward') {
                 closeWinnerOverlay();
-                openShippingModal(String(pendingRewardId));
+                openShippingModal(String(pendingRewardId), pendingRewardName, pendingRewardImage);
                 return;
             }
 
@@ -2601,14 +2685,28 @@
         setInterval(fetchCurrentRewards, 60000);
 
         // --- TRACKING MODAL (Physical Rewards - after claimed) ---
-        async function openTrackingModal(rewardId, rewardName) {
+        window._trackingShippingData = null; // store for WhatsApp prefill
+
+        async function openTrackingModal(rewardId, rewardName, rewardImage) {
             const modal = document.getElementById('tracking-modal');
             const statusArea = document.getElementById('tracking-status-area');
             const contactArea = document.getElementById('tracking-contact-area');
             const nameEl = document.getElementById('tracking-reward-name');
+            const imgWrap = document.getElementById('tracking-reward-img-wrap');
+            const imgEl = document.getElementById('tracking-reward-img');
 
+            // Set reward name
             nameEl.textContent = rewardName || 'Physical Reward';
-            statusArea.innerHTML = `<div style="display:inline-block; width:24px; height:24px; border:3px solid #475569; border-top-color:#60a5fa; border-radius:50%; animation:spin 0.8s linear infinite;"></div><div style="color:#94a3b8; font-size:0.85rem; margin-top:8px;">Loading order status...</div>`;
+
+            // Set reward image
+            if (rewardImage) {
+                imgEl.src = rewardImage;
+                imgWrap.style.display = 'block';
+            } else {
+                imgWrap.style.display = 'none';
+            }
+
+            statusArea.innerHTML = `<div style="display:inline-block; width:30px; height:30px; border:3px solid #475569; border-top-color:#60a5fa; border-radius:50%; animation:spin 0.8s linear infinite;"></div><div style="color:#94a3b8; font-size:1rem; margin-top:10px;">Loading order status...</div>`;
             contactArea.style.display = 'none';
             modal.style.display = 'flex';
 
@@ -2618,44 +2716,101 @@
 
                 if (data.order) {
                     const o = data.order;
-                    const statusColors = { pending: '#f59e0b', shipped: '#3b82f6', delivered: '#10b981', cancelled: '#ef4444' };
-                    const statusLabels = { pending: '⏳ Order Received', shipped: '🚚 Shipped', delivered: '✅ Delivered', cancelled: '❌ Cancelled' };
-                    const sc = statusColors[o.order_status] || '#94a3b8';
-                    const sl = statusLabels[o.order_status] || o.order_status;
+                    // Store shipping data for WhatsApp
+                    window._trackingShippingData = {
+                        fullName: o.full_name || '', phone: o.phone || '',
+                        address: o.address || '', city: o.city || '',
+                        state: o.state || '', pincode: o.pincode || ''
+                    };
 
-                    let trackingHtml = '';
-                    if (o.tracking_link) {
-                        trackingHtml = `
-                            <div style="margin-top:14px;">
-                                <button onclick="window.open('${o.tracking_link.replace(/'/g,"\\'")}','_blank')" style="
-                                    background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border:none;
-                                    padding:12px 24px; border-radius:12px; cursor:pointer; font-weight:700; font-size:0.9rem;
-                                    box-shadow:0 4px 12px rgba(59,130,246,0.3); display:inline-flex; align-items:center; gap:8px;
-                                ">🔗 Track Your Order</button>
+                    // Step-based progress
+                    const steps = ['pending', 'shipped', 'delivered'];
+                    const stepIdx = o.order_status === 'cancelled' ? -1 : steps.indexOf(o.order_status);
+                    const stepIcons = ['📋', '🚚', '✅'];
+                    const stepLabels = ['Order Placed', 'Shipped', 'Delivered'];
+
+                    let progressHtml = '';
+                    if (o.order_status === 'cancelled') {
+                        progressHtml = `
+                            <div style="padding:18px; background:rgba(239,68,68,0.08); border:1.5px solid rgba(239,68,68,0.2); border-radius:18px; margin-bottom:16px;">
+                                <div style="font-size:2.5rem; margin-bottom:6px;">❌</div>
+                                <div style="color:#ef4444; font-family:'Teko',sans-serif; font-size:1.6rem; font-weight:700; letter-spacing:1px;">ORDER CANCELLED</div>
+                                <div style="color:#94a3b8; font-size:0.85rem; margin-top:4px;">Please contact support for more info</div>
                             </div>`;
-                    } else if (o.order_status === 'pending' || o.order_status === 'shipped') {
-                        trackingHtml = `
-                            <div style="margin-top:14px; padding:14px 18px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.2); border-radius:14px;">
-                                <div style="font-size:1.3rem; margin-bottom:6px;">🎁</div>
-                                <div style="color:#fbbf24; font-weight:600; font-size:0.9rem;">You will receive your order soon!</div>
-                                <div style="color:#94a3b8; font-size:0.75rem; margin-top:4px;">We're preparing your reward for shipping.</div>
+                    } else {
+                        // Visual step progress bar
+                        let stepsHtml = steps.map((s, i) => {
+                            const done = i <= stepIdx;
+                            const active = i === stepIdx;
+                            const circleColor = done ? '#22c55e' : '#334155';
+                            const circleGlow = active ? 'box-shadow:0 0 12px rgba(34,197,94,0.4);' : '';
+                            const labelColor = done ? '#e2e8f0' : '#64748b';
+                            const lineColor = (i < stepIdx) ? '#22c55e' : '#334155';
+                            return `
+                                <div style="display:flex; flex-direction:column; align-items:center; flex:1; position:relative;">
+                                    ${i > 0 ? `<div style="position:absolute; top:18px; right:50%; width:100%; height:3px; background:${lineColor}; z-index:0;"></div>` : ''}
+                                    <div style="width:38px; height:38px; border-radius:50%; background:${circleColor}; display:flex; align-items:center; justify-content:center; font-size:1.2rem; z-index:1; ${circleGlow} border:2px solid ${done ? '#22c55e' : '#475569'}; transition:all 0.3s;">${done ? stepIcons[i] : '<span style="color:#64748b;">○</span>'}</div>
+                                    <div style="color:${labelColor}; font-size:0.8rem; font-weight:${active ? '700' : '500'}; margin-top:8px; text-align:center;">${stepLabels[i]}</div>
+                                </div>`;
+                        }).join('');
+
+                        progressHtml = `
+                            <div style="display:flex; align-items:flex-start; justify-content:space-between; padding:16px 10px; background:rgba(255,255,255,0.03); border-radius:18px; margin-bottom:16px;">
+                                ${stepsHtml}
+                            </div>`;
+
+                        // Current status message
+                        const statusMsgs = {
+                            pending: { emoji: '🎁', title: 'ORDER RECEIVED!', desc: 'We have received your order and it will be shipped soon.' },
+                            shipped: { emoji: '🚚', title: 'ON THE WAY!', desc: 'Your reward has been shipped and is on its way to you.' },
+                            delivered: { emoji: '🎉', title: 'DELIVERED!', desc: 'Your reward has been delivered. Enjoy!' }
+                        };
+                        const sm = statusMsgs[o.order_status] || statusMsgs.pending;
+                        const smColor = o.order_status === 'delivered' ? '#22c55e' : (o.order_status === 'shipped' ? '#3b82f6' : '#f59e0b');
+
+                        progressHtml += `
+                            <div style="padding:16px; background:${smColor}0D; border:1.5px solid ${smColor}30; border-radius:16px; margin-bottom:14px;">
+                                <div style="font-size:2rem; margin-bottom:4px;">${sm.emoji}</div>
+                                <div style="color:${smColor}; font-family:'Teko',sans-serif; font-size:1.5rem; font-weight:700; letter-spacing:1px;">${sm.title}</div>
+                                <div style="color:#94a3b8; font-size:0.9rem; margin-top:4px;">${sm.desc}</div>
                             </div>`;
                     }
 
+                    // Tracking link button
+                    let trackBtnHtml = '';
+                    if (o.tracking_link) {
+                        trackBtnHtml = `
+                            <button onclick="window.open('${o.tracking_link.replace(/'/g,"\\'")}','_blank')" style="
+                                width:100%; padding:14px; background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border:none;
+                                border-radius:16px; cursor:pointer; font-weight:800; font-size:1.05rem;
+                                box-shadow:0 6px 20px rgba(59,130,246,0.3); display:flex; align-items:center; justify-content:center; gap:10px;
+                                margin-bottom:8px; letter-spacing:0.5px;
+                            ">🔗 TRACK YOUR ORDER</button>`;
+                    }
+
+                    // Order info line
+                    const orderDate = new Date(o.created_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+
                     statusArea.innerHTML = `
-                        <div style="display:inline-flex; align-items:center; gap:8px; padding:10px 20px; background:${sc}15; border:1.5px solid ${sc}40; border-radius:30px; margin-bottom:12px;">
-                            <span style="color:${sc}; font-weight:700; font-size:1rem;">${sl}</span>
-                        </div>
-                        <div style="color:#64748b; font-size:0.7rem;">Order #${o.id} • ${new Date(o.created_at).toLocaleDateString()}</div>
-                        ${trackingHtml}
+                        ${progressHtml}
+                        ${trackBtnHtml}
+                        <div style="color:#64748b; font-size:0.8rem; margin-top:4px;">Order #${o.id} &bull; ${orderDate}</div>
                     `;
                 } else {
-                    statusArea.innerHTML = `<div style="color:#94a3b8; font-size:0.9rem;">Order information not available</div>`;
+                    // Just submitted — data not yet in DB, show pending
+                    window._trackingShippingData = window._lastShippingData || null;
+                    statusArea.innerHTML = `
+                        <div style="padding:20px; background:rgba(251,191,36,0.08); border:1.5px solid rgba(251,191,36,0.15); border-radius:18px; margin-bottom:14px;">
+                            <div style="font-size:2.5rem; margin-bottom:6px;">🎁</div>
+                            <div style="color:#fbbf24; font-family:'Teko',sans-serif; font-size:1.6rem; font-weight:700; letter-spacing:1px;">ORDER PLACED!</div>
+                            <div style="color:#94a3b8; font-size:0.9rem; margin-top:6px;">Your order has been placed successfully.<br>We will ship your reward soon!</div>
+                        </div>
+                    `;
                 }
 
                 contactArea.style.display = 'block';
             } catch (e) {
-                statusArea.innerHTML = `<div style="color:#ef4444; font-size:0.9rem;">Failed to load order status</div>`;
+                statusArea.innerHTML = `<div style="color:#ef4444; font-size:1rem; padding:20px;">Failed to load order status</div>`;
                 contactArea.style.display = 'block';
             }
         }
@@ -2669,11 +2824,18 @@
             const email = localStorage.getItem('tc_email') || 'N/A';
             const userId = localStorage.getItem('tc_user_id') || 'N/A';
 
+            // Build message with shipping data if available
+            let shipInfo = '';
+            const sd = window._trackingShippingData || window._lastShippingData;
+            if (sd && sd.fullName) {
+                shipInfo = `\n\nShipping Details:\nName: ${sd.fullName}\nPhone: ${sd.phone}\nAddress: ${sd.address}, ${sd.city}, ${sd.state} - ${sd.pincode}`;
+            }
+
             try {
                 const res = await fetch(`${SERVER_URL}/api/whatsapp-number`);
                 const data = await res.json();
                 if (data.number) {
-                    const msg = encodeURIComponent(`Hi! I need help with my order.\n\nUsername: ${username}\nEmail: ${email}\nUser ID: ${userId}`);
+                    const msg = encodeURIComponent(`Hi! I need help with my order.\n\nUsername: ${username}\nEmail: ${email}\nUser ID: ${userId}${shipInfo}`);
                     window.open(`https://wa.me/${data.number}?text=${msg}`, '_blank');
                 } else {
                     showClaimToast('Contact not available yet', true);
