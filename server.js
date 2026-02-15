@@ -816,6 +816,7 @@ CREATE TABLE physical_reward_orders (
     pincode TEXT NOT NULL,
     order_status TEXT DEFAULT 'pending',
     admin_notes TEXT,
+    tracking_link TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_physical_orders_user ON physical_reward_orders(user_id);
@@ -1225,14 +1226,18 @@ fastify.get('/api/admin/physical-orders', async (req, reply) => {
     }
 });
 
-// Update physical reward order status (admin)
+// Update physical reward order status (admin) — also accepts tracking_link
 fastify.post('/api/admin/physical-orders/:orderId/status', async (req, reply) => {
     try {
         if (!supabase) return { error: 'Database not configured' };
-        const { status, admin_notes } = req.body;
+        const { status, admin_notes, tracking_link } = req.body;
+        const updateData = {};
+        if (status) updateData.order_status = status;
+        if (admin_notes !== undefined) updateData.admin_notes = admin_notes;
+        if (tracking_link !== undefined) updateData.tracking_link = tracking_link;
         const { data, error } = await supabase
             .from('physical_reward_orders')
-            .update({ order_status: status, admin_notes })
+            .update(updateData)
             .eq('id', req.params.orderId)
             .select();
         if (error) return { error: error.message };
@@ -1240,6 +1245,45 @@ fastify.post('/api/admin/physical-orders/:orderId/status', async (req, reply) =>
     } catch (e) {
         return { error: e.message };
     }
+});
+
+// Get/Set WhatsApp contact number (admin config in Redis)
+fastify.get('/api/admin/whatsapp-config', async (req, reply) => {
+    try {
+        const number = await redis.get('admin:whatsapp_number') || '';
+        return { number };
+    } catch (e) { return { number: '', error: e.message }; }
+});
+fastify.post('/api/admin/whatsapp-config', async (req, reply) => {
+    try {
+        const { number } = req.body;
+        if (!number) return { error: 'number required' };
+        await redis.set('admin:whatsapp_number', number);
+        return { success: true };
+    } catch (e) { return { error: e.message }; }
+});
+
+// Get WhatsApp number (public — for user contact button)
+fastify.get('/api/whatsapp-number', async (req, reply) => {
+    try {
+        const number = await redis.get('admin:whatsapp_number') || '';
+        return { number };
+    } catch (e) { return { number: '' }; }
+});
+
+// Get physical order status for a specific user_reward (for user My Wins OPEN)
+fastify.get('/api/physical-order-status', async (req, reply) => {
+    try {
+        const { rewardId } = req.query;
+        if (!rewardId || !supabase) return { order: null };
+        const { data, error } = await supabase
+            .from('physical_reward_orders')
+            .select('id, order_status, tracking_link, created_at')
+            .eq('user_reward_id', rewardId)
+            .single();
+        if (error) return { order: null };
+        return { order: data };
+    } catch (e) { return { order: null }; }
 });
 
 // Get user's tournament history (best score per tournament)

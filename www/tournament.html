@@ -907,7 +907,14 @@
                 window.leaderboardTimeLeft = secondsRemaining * 1000;
 
                 if (window.tournamentResults) {
-                    displayTournamentResults(window.tournamentResults);
+                    // Only update the countdown timer, don't re-render everything
+                    const timerEl = document.getElementById('lb-countdown-timer');
+                    if (timerEl) {
+                        timerEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                    } else {
+                        // First render — full display
+                        displayTournamentResults(window.tournamentResults);
+                    }
                 } else {
                     // FULL SCREEN FALLBACK (Waiting for Results)
                     // This hides the "Daily Tournament" header immediately
@@ -1141,7 +1148,7 @@
                         </div>
                         <div style="display:flex; align-items:center; gap:6px; background:rgba(124,58,237,0.1); border:1px solid rgba(124,58,237,0.25); border-radius:10px; padding:4px 10px;">
                             <span style="font-size:0.6rem; color:#a78bfa; font-weight:600;">NEXT</span>
-                            <span style="font-family:'Teko',sans-serif; font-size:1.5rem; color:#fff; font-weight:700; letter-spacing:2px; line-height:1;">${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}</span>
+                            <span id="lb-countdown-timer" style="font-family:'Teko',sans-serif; font-size:1.5rem; color:#fff; font-weight:700; letter-spacing:2px; line-height:1;">${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}</span>
                         </div>
                     </div>
                 </div>
@@ -1625,6 +1632,39 @@
         </div>
     </div>
 
+    <!-- ==================== TRACKING INFO POPUP ==================== -->
+    <div id="tracking-modal" style="display:none; position:fixed; inset:0; z-index:30000; justify-content:center; align-items:center; background:rgba(0,0,0,0.92); backdrop-filter:blur(12px);">
+        <div style="
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            border: 1px solid rgba(59,130,246,0.2);
+            width:92%; max-width:400px;
+            border-radius:24px;
+            box-shadow: 0 0 60px rgba(59,130,246,0.06), 0 25px 50px rgba(0,0,0,0.5);
+            animation: modalSlideIn 0.35s cubic-bezier(0.16,1,0.3,1);
+            padding:28px 24px; overflow:hidden; text-align:center;
+        ">
+            <div style="font-size:2.5rem; margin-bottom:8px;">📦</div>
+            <h2 style="margin:0 0 4px; color:#60a5fa; font-family:'Teko',sans-serif; font-size:1.5rem; letter-spacing:1px;">ORDER STATUS</h2>
+            <div id="tracking-reward-name" style="color:#94a3b8; font-size:0.8rem; margin-bottom:16px;"></div>
+
+            <div id="tracking-status-area" style="margin-bottom:20px;">
+                <div style="display:inline-block; width:24px; height:24px; border:3px solid #475569; border-top-color:#60a5fa; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+                <div style="color:#94a3b8; font-size:0.85rem; margin-top:8px;">Loading...</div>
+            </div>
+
+            <div id="tracking-contact-area" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.06);">
+                <div style="color:#64748b; font-size:0.7rem; margin-bottom:8px;">Need help with your order?</div>
+                <button id="tracking-whatsapp-btn" onclick="openWhatsAppContact()" style="
+                    background:linear-gradient(135deg,#22c55e,#16a34a); color:white; border:none;
+                    padding:10px 20px; border-radius:12px; cursor:pointer; font-weight:700; font-size:0.85rem;
+                    box-shadow:0 4px 12px rgba(34,197,94,0.3); display:inline-flex; align-items:center; gap:8px;
+                ">💬 Contact on WhatsApp</button>
+            </div>
+
+            <button onclick="closeTrackingModal()" style="margin-top:16px; background:none; border:none; color:#64748b; cursor:pointer; font-size:0.85rem; padding:8px 20px;">Close</button>
+        </div>
+    </div>
+
     <!-- ==================== SHIPPING DATA MODAL ==================== -->
     <div id="shipping-modal" style="display:none; position:fixed; inset:0; z-index:30000; justify-content:center; align-items:center; background:rgba(0,0,0,0.92); backdrop-filter:blur(12px);">
         <div style="
@@ -2007,10 +2047,19 @@
                                 "><span style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent);animation:shineSlide 2s infinite;"></span><span style="position:relative;">CLAIM</span></button>`;
                             }
                         } else {
-                            actionHtml = `<div style="display:flex; align-items:center; gap:5px; color:#10b981; font-weight:600; font-size:0.7rem; background:rgba(16,185,129,0.08); padding:5px 10px; border-radius:20px; white-space:nowrap;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-                                Claimed
-                            </div>`;
+                            // CLAIMED — for physical rewards show OPEN button for tracking
+                            if (rType === 'physical_reward') {
+                                actionHtml = `<button onclick="openTrackingModal('${r.id}','${(r.reward_name||'').replace(/'/g,"\\'")}')" style="
+                                    background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border:none; padding:7px 12px;
+                                    border-radius:10px; cursor:pointer; font-weight:700; font-size:0.7rem;
+                                    box-shadow:0 2px 8px rgba(59,130,246,0.25); white-space:nowrap; display:flex; align-items:center; gap:4px;
+                                ">📦 OPEN</button>`;
+                            } else {
+                                actionHtml = `<div style="display:flex; align-items:center; gap:5px; color:#10b981; font-weight:600; font-size:0.7rem; background:rgba(16,185,129,0.08); padding:5px 10px; border-radius:20px; white-space:nowrap;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                                    Claimed
+                                </div>`;
+                            }
                         }
 
                         // Redeem code display (always visible for redeem_code type, even after claimed)
@@ -2330,6 +2379,7 @@
         // --- WINNER OVERLAY ---
         let pendingRewardId = null;
         let pendingTournamentId = null;
+        let pendingRewardType = 'default';
         let winnerOverlayShown = false;
 
         function showWinnerOverlay(reward) {
@@ -2421,12 +2471,19 @@
                         }
                         if (unclaimed) {
                             pendingRewardId = unclaimed.id;
-                            console.log(`✅ Found pending reward ID: ${pendingRewardId} (attempt ${attempt + 1})`);
-                            // Update claim button if visible
+                            pendingRewardType = unclaimed.reward_type || 'default';
+                            console.log(`✅ Found pending reward ID: ${pendingRewardId}, type: ${pendingRewardType} (attempt ${attempt + 1})`);
+                            // Update claim button text based on type
                             const claimBtn = document.getElementById('winner-claim-btn');
                             const claimText = document.getElementById('winner-claim-text');
                             if (claimBtn && claimText && claimBtn.disabled === false) {
-                                claimText.textContent = 'CLAIM REWARD';
+                                if (pendingRewardType === 'physical_reward') {
+                                    claimText.textContent = '📦 CLAIM & SHIP';
+                                } else if (pendingRewardType === 'redeem_code') {
+                                    claimText.textContent = '🔑 CLAIM CODE';
+                                } else {
+                                    claimText.textContent = 'CLAIM REWARD';
+                                }
                             }
                             return;
                         }
@@ -2440,12 +2497,18 @@
 
         async function claimWinnerReward() {
             if (!pendingRewardId) {
-                // Try fetching one more time
                 await fetchPendingRewardId();
                 if (!pendingRewardId) {
                     showClaimToast('Reward not ready yet, check My Wins later', true);
                     return;
                 }
+            }
+
+            // PHYSICAL REWARD → open shipping form instead of direct claim
+            if (pendingRewardType === 'physical_reward') {
+                closeWinnerOverlay();
+                openShippingModal(String(pendingRewardId));
+                return;
             }
 
             const btn = document.getElementById('winner-claim-btn');
@@ -2462,17 +2525,26 @@
                 const data = await res.json();
 
                 if (data.success) {
-                    // Success animation
                     btn.style.background = 'linear-gradient(135deg,#10b981,#059669)';
-                    claimText.textContent = '✓ CLAIMED!';
-                    btn.style.animation = 'claimSuccess 0.4s ease-out';
                     startConfetti();
 
-                    showClaimToast('Reward Claimed Successfully!');
-
-                    setTimeout(() => {
-                        closeWinnerOverlay();
-                    }, 2000);
+                    // REDEEM CODE → show code with copy button
+                    if (pendingRewardType === 'redeem_code' && data.reward && data.reward.redeem_code) {
+                        claimText.textContent = '✓ CLAIMED!';
+                        showClaimToast('Code Claimed!');
+                        // Insert code display below claim button
+                        const codeArea = document.createElement('div');
+                        codeArea.style.cssText = 'margin-top:16px; padding:12px 16px; background:rgba(168,85,247,0.1); border:1px solid rgba(168,85,247,0.25); border-radius:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;';
+                        codeArea.innerHTML = `
+                            <div style="font-family:monospace; color:#c084fc; font-size:1.1rem; font-weight:700; letter-spacing:1.5px; overflow:hidden; text-overflow:ellipsis;">${data.reward.redeem_code}</div>
+                            <button onclick="copyCode('${data.reward.redeem_code.replace(/'/g,"\\'")}',this)" style="background:rgba(168,85,247,0.25); border:1px solid rgba(168,85,247,0.35); color:#c084fc; padding:6px 14px; border-radius:8px; cursor:pointer; font-size:0.8rem; font-weight:700; white-space:nowrap;">📋 COPY</button>
+                        `;
+                        btn.parentNode.insertBefore(codeArea, btn.nextSibling);
+                    } else {
+                        claimText.textContent = '✓ CLAIMED!';
+                        showClaimToast('Reward Claimed Successfully!');
+                        setTimeout(() => closeWinnerOverlay(), 2000);
+                    }
                 } else {
                     showClaimToast('Error: ' + (data.error || 'Unknown'), true);
                     btn.disabled = false;
@@ -2528,6 +2600,89 @@
         fetchCurrentRewards();
         setInterval(fetchCurrentRewards, 60000);
 
+        // --- TRACKING MODAL (Physical Rewards - after claimed) ---
+        async function openTrackingModal(rewardId, rewardName) {
+            const modal = document.getElementById('tracking-modal');
+            const statusArea = document.getElementById('tracking-status-area');
+            const contactArea = document.getElementById('tracking-contact-area');
+            const nameEl = document.getElementById('tracking-reward-name');
+
+            nameEl.textContent = rewardName || 'Physical Reward';
+            statusArea.innerHTML = `<div style="display:inline-block; width:24px; height:24px; border:3px solid #475569; border-top-color:#60a5fa; border-radius:50%; animation:spin 0.8s linear infinite;"></div><div style="color:#94a3b8; font-size:0.85rem; margin-top:8px;">Loading order status...</div>`;
+            contactArea.style.display = 'none';
+            modal.style.display = 'flex';
+
+            try {
+                const res = await fetch(`${SERVER_URL}/api/physical-order-status?rewardId=${rewardId}`);
+                const data = await res.json();
+
+                if (data.order) {
+                    const o = data.order;
+                    const statusColors = { pending: '#f59e0b', shipped: '#3b82f6', delivered: '#10b981', cancelled: '#ef4444' };
+                    const statusLabels = { pending: '⏳ Order Received', shipped: '🚚 Shipped', delivered: '✅ Delivered', cancelled: '❌ Cancelled' };
+                    const sc = statusColors[o.order_status] || '#94a3b8';
+                    const sl = statusLabels[o.order_status] || o.order_status;
+
+                    let trackingHtml = '';
+                    if (o.tracking_link) {
+                        trackingHtml = `
+                            <div style="margin-top:14px;">
+                                <button onclick="window.open('${o.tracking_link.replace(/'/g,"\\'")}','_blank')" style="
+                                    background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border:none;
+                                    padding:12px 24px; border-radius:12px; cursor:pointer; font-weight:700; font-size:0.9rem;
+                                    box-shadow:0 4px 12px rgba(59,130,246,0.3); display:inline-flex; align-items:center; gap:8px;
+                                ">🔗 Track Your Order</button>
+                            </div>`;
+                    } else if (o.order_status === 'pending' || o.order_status === 'shipped') {
+                        trackingHtml = `
+                            <div style="margin-top:14px; padding:14px 18px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.2); border-radius:14px;">
+                                <div style="font-size:1.3rem; margin-bottom:6px;">🎁</div>
+                                <div style="color:#fbbf24; font-weight:600; font-size:0.9rem;">You will receive your order soon!</div>
+                                <div style="color:#94a3b8; font-size:0.75rem; margin-top:4px;">We're preparing your reward for shipping.</div>
+                            </div>`;
+                    }
+
+                    statusArea.innerHTML = `
+                        <div style="display:inline-flex; align-items:center; gap:8px; padding:10px 20px; background:${sc}15; border:1.5px solid ${sc}40; border-radius:30px; margin-bottom:12px;">
+                            <span style="color:${sc}; font-weight:700; font-size:1rem;">${sl}</span>
+                        </div>
+                        <div style="color:#64748b; font-size:0.7rem;">Order #${o.id} • ${new Date(o.created_at).toLocaleDateString()}</div>
+                        ${trackingHtml}
+                    `;
+                } else {
+                    statusArea.innerHTML = `<div style="color:#94a3b8; font-size:0.9rem;">Order information not available</div>`;
+                }
+
+                contactArea.style.display = 'block';
+            } catch (e) {
+                statusArea.innerHTML = `<div style="color:#ef4444; font-size:0.9rem;">Failed to load order status</div>`;
+                contactArea.style.display = 'block';
+            }
+        }
+
+        function closeTrackingModal() {
+            document.getElementById('tracking-modal').style.display = 'none';
+        }
+
+        async function openWhatsAppContact() {
+            const username = localStorage.getItem('tc_username') || 'Unknown';
+            const email = localStorage.getItem('tc_email') || 'N/A';
+            const userId = localStorage.getItem('tc_user_id') || 'N/A';
+
+            try {
+                const res = await fetch(`${SERVER_URL}/api/whatsapp-number`);
+                const data = await res.json();
+                if (data.number) {
+                    const msg = encodeURIComponent(`Hi! I need help with my order.\n\nUsername: ${username}\nEmail: ${email}\nUser ID: ${userId}`);
+                    window.open(`https://wa.me/${data.number}?text=${msg}`, '_blank');
+                } else {
+                    showClaimToast('Contact not available yet', true);
+                }
+            } catch (e) {
+                showClaimToast('Failed to get contact info', true);
+            }
+        }
+
         // Expose functions globally
         window.showRewards = showRewards;
         window.closeRewards = closeRewards;
@@ -2545,6 +2700,9 @@
         window.closeShippingModal = closeShippingModal;
         window.submitShippingData = submitShippingData;
         window.claimAndOpenLink = claimAndOpenLink;
+        window.openTrackingModal = openTrackingModal;
+        window.closeTrackingModal = closeTrackingModal;
+        window.openWhatsAppContact = openWhatsAppContact;
     })();
     </script>
 </body>
