@@ -61,85 +61,117 @@ fastify.addHook('onRequest', async (req, reply) => {
     }
 });
 
+// --- HEARTBEAT (Track active users across ALL pages) ---
+fastify.post('/api/heartbeat', async (req, reply) => {
+    try {
+        const { userId, username, email, page } = req.body;
+        if (!userId) return { success: false };
+
+        // Store in Redis with 60s TTL — auto-expires if user goes offline
+        const key = `heartbeat:${userId}`;
+        await redis.set(key, JSON.stringify({
+            userId, username: username || 'Player', email: email || '',
+            page: page || 'unknown', lastSeen: Date.now()
+        }));
+        await redis.expire(key, 60); // 60 second TTL
+
+        return { success: true };
+    } catch (e) { return { success: false }; }
+});
+
 // --- ADMIN ENDPOINTS ---
-// Admin: Get Active Firebase Users (Real-time active users)
+// Admin: Get Active Firebase Users (Real-time active users from heartbeat + socket)
 fastify.get('/api/admin/firebase-active-users', async (req, reply) => {
     try {
-        // Get active user IDs from socket connections
-        const activeUserIds = Array.from(activeUsers.values()).map(u => u.userId);
+        // 1. Get heartbeat users from Redis (all pages)
+        const heartbeatKeys = await redis.keys('heartbeat:*');
+        const heartbeatUsers = new Map(); // userId -> data
+        for (const key of heartbeatKeys) {
+            try {
+                const raw = await redis.get(key);
+                if (raw) {
+                    const data = JSON.parse(raw);
+                    heartbeatUsers.set(data.userId, data);
+                }
+            } catch (e) { /* skip bad data */ }
+        }
 
-        console.log(`📊 Admin Request: Active Users Count = ${activeUsers.size}, User IDs = ${activeUserIds.length}`);
+        // 2. Merge with socket-connected users (adds tournament-specific data)
+        for (const [, su] of activeUsers) {
+            if (!heartbeatUsers.has(su.userId)) {
+                heartbeatUsers.set(su.userId, {
+                    userId: su.userId,
+                    username: su.username || 'Player',
+                    email: su.email || '',
+                    page: 'tournament',
+                    lastSeen: su.lastActivity || Date.now()
+                });
+            } else {
+                // Update lastSeen if socket is more recent
+                const existing = heartbeatUsers.get(su.userId);
+                if ((su.lastActivity || 0) > (existing.lastSeen || 0)) {
+                    existing.lastSeen = su.lastActivity;
+                    existing.page = 'tournament';
+                }
+            }
+        }
 
-        if (activeUserIds.length === 0) {
+        const allUserIds = Array.from(heartbeatUsers.keys());
+
+        if (allUserIds.length === 0) {
             return { count: 0, users: [], message: "No active users currently" };
         }
 
-        // If Firebase Admin is available, fetch full user details
+        // 3. Build user list with Firebase details if available
         if (isSecureMode && admin && admin.auth) {
-            const firebaseUsersPromises = activeUserIds.map(async (uid) => {
+            const users = await Promise.all(allUserIds.map(async (uid) => {
+                const hb = heartbeatUsers.get(uid);
                 try {
                     const user = await admin.auth().getUser(uid);
-                    const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
                     return {
                         uid: user.uid,
-                        email: user.email || 'N/A',
-                        displayName: user.displayName || user.email?.split('@')[0] || 'Guest',
+                        email: user.email || hb.email || 'N/A',
+                        displayName: user.displayName || user.email?.split('@')[0] || hb.username || 'Guest',
                         photoURL: user.photoURL || null,
                         emailVerified: user.emailVerified || false,
                         creationTime: user.metadata.creationTime,
                         lastSignInTime: user.metadata.lastSignInTime || null,
-                        connectedAt: activeUser?.connectedAt || Date.now(),
-                        lastActivity: activeUser?.lastActivity || Date.now(),
+                        connectedAt: hb.lastSeen || Date.now(),
+                        lastActivity: hb.lastSeen || Date.now(),
+                        page: hb.page || 'unknown',
                         isActive: true
                     };
                 } catch (e) {
-                    // User might not exist in Firebase (guest user)
-                    const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
                     return {
                         uid: uid,
-                        email: activeUser?.email || 'Guest User',
-                        displayName: activeUser?.username || 'Guest',
-                        photoURL: null,
-                        emailVerified: false,
-                        creationTime: null,
-                        lastSignInTime: null,
-                        connectedAt: activeUser?.connectedAt || Date.now(),
-                        lastActivity: activeUser?.lastActivity || Date.now(),
-                        isActive: true,
-                        isGuest: true
+                        email: hb.email || 'Guest User',
+                        displayName: hb.username || 'Guest',
+                        photoURL: null, emailVerified: false,
+                        creationTime: null, lastSignInTime: null,
+                        connectedAt: hb.lastSeen || Date.now(),
+                        lastActivity: hb.lastSeen || Date.now(),
+                        page: hb.page || 'unknown',
+                        isActive: true, isGuest: true
                     };
                 }
-            });
-
-            const users = await Promise.all(firebaseUsersPromises);
-            return {
-                count: users.length,
-                users: users.sort((a, b) => b.lastActivity - a.lastActivity)
-            };
+            }));
+            return { count: users.length, users: users.sort((a, b) => b.lastActivity - a.lastActivity) };
         } else {
-            // Fallback: Return active users from socket connections without Firebase details
-            const users = activeUserIds.map(uid => {
-                const activeUser = Array.from(activeUsers.values()).find(u => u.userId === uid);
+            const users = allUserIds.map(uid => {
+                const hb = heartbeatUsers.get(uid);
                 return {
                     uid: uid,
-                    email: activeUser?.email || 'N/A',
-                    displayName: activeUser?.username || 'Guest',
-                    photoURL: null,
-                    emailVerified: false,
-                    creationTime: null,
-                    lastSignInTime: null,
-                    connectedAt: activeUser?.connectedAt || Date.now(),
-                    lastActivity: activeUser?.lastActivity || Date.now(),
-                    isActive: true,
-                    isGuest: !activeUser?.email
+                    email: hb.email || 'N/A',
+                    displayName: hb.username || 'Guest',
+                    photoURL: null, emailVerified: false,
+                    creationTime: null, lastSignInTime: null,
+                    connectedAt: hb.lastSeen || Date.now(),
+                    lastActivity: hb.lastSeen || Date.now(),
+                    page: hb.page || 'unknown',
+                    isActive: true, isGuest: !hb.email
                 };
             });
-
-            return {
-                count: users.length,
-                users: users.sort((a, b) => b.lastActivity - a.lastActivity),
-                message: "Firebase Admin not available - showing socket connection data"
-            };
+            return { count: users.length, users: users.sort((a, b) => b.lastActivity - a.lastActivity) };
         }
     } catch (e) {
         console.error("❌ Error fetching active Firebase users:", e);
@@ -988,13 +1020,24 @@ fastify.post('/api/claim-reward', async (req, reply) => {
         }
 
         if (existing.is_claimed) {
-            return { success: true, reward: existing, message: 'Already claimed' };
+            // For physical rewards, verify shipping data was actually provided
+            const rt = existing.reward_type || 'default';
+            if (rt === 'physical_reward' && !existing.claim_data) {
+                // Was incorrectly marked claimed without shipping — reset and require form
+                await supabase.from('user_rewards').update({ is_claimed: false }).eq('id', rewardId);
+                // Fall through to normal flow
+            } else {
+                return { success: true, reward: existing, message: 'Already claimed' };
+            }
         }
 
         const rewardType = existing.reward_type || 'default';
 
-        // For physical_reward, require shipping data
-        if (rewardType === 'physical_reward' && shippingData) {
+        // For physical_reward, REQUIRE shipping data — cannot claim without it
+        if (rewardType === 'physical_reward') {
+            if (!shippingData || !shippingData.fullName || !shippingData.phone || !shippingData.address || !shippingData.pincode) {
+                return { error: 'Shipping details required for physical rewards', requiresShipping: true };
+            }
             // Save physical reward order
             const { error: orderErr } = await supabase
                 .from('physical_reward_orders')
@@ -1010,7 +1053,6 @@ fastify.post('/api/claim-reward', async (req, reply) => {
                 });
             if (orderErr) {
                 console.error("❌ Error saving physical reward order:", orderErr);
-                // Don't block claim if order table missing
             }
         }
 
@@ -1299,6 +1341,148 @@ fastify.get('/api/whatsapp-number', async (req, reply) => {
         return { number };
     } catch (e) { return { number: '' }; }
 });
+
+// --- PUSH NOTIFICATION SYSTEM (FCM) ---
+// Register FCM token from client
+fastify.post('/api/register-fcm-token', async (req, reply) => {
+    try {
+        const { token, userId, username } = req.body;
+        if (!token) return { error: 'Token required' };
+
+        // Store token in Redis set (auto-deduplicates)
+        await redis.sadd('fcm:tokens', token);
+        // Store user mapping for token
+        if (userId) {
+            await redis.hset('fcm:token_users', token, JSON.stringify({ userId, username: username || 'Player', updatedAt: Date.now() }));
+        }
+
+        console.log(`🔔 [FCM] Token registered: ${token.substring(0, 20)}... (user: ${userId || 'anon'})`);
+        return { success: true };
+    } catch (e) {
+        console.error('🔔 [FCM] Registration error:', e.message);
+        return { error: e.message };
+    }
+});
+
+// Unregister FCM token (on logout)
+fastify.post('/api/unregister-fcm-token', async (req, reply) => {
+    try {
+        const { token } = req.body;
+        if (!token) return { error: 'Token required' };
+        await redis.srem('fcm:tokens', token);
+        await redis.hdel('fcm:token_users', token);
+        return { success: true };
+    } catch (e) { return { error: e.message }; }
+});
+
+// Send push notification to all registered devices
+async function sendTournamentPushNotification(tournamentKey, rewards) {
+    if (!isSecureMode || !admin || !admin.messaging) {
+        console.log('🔔 [FCM] Skipping push — Firebase Admin not available');
+        return;
+    }
+
+    try {
+        // Get all registered FCM tokens
+        const tokens = await redis.smembers('fcm:tokens');
+        if (!tokens || tokens.length === 0) {
+            console.log('🔔 [FCM] No registered tokens — skipping push');
+            return;
+        }
+
+        // Build notification content
+        let title = '🏆 Tournament LIVE NOW!';
+        let body = 'A new tournament just started! Jump in and compete for prizes!';
+        let imageUrl = '';
+
+        if (rewards && rewards.length > 0) {
+            const topReward = rewards[0];
+            const maxRank = Math.max(...rewards.map(r => parseInt(r.max) || 0));
+            title = `🏆 Tournament LIVE — Win ${topReward.name}!`;
+            body = `Top ${maxRank} players win prizes! Play now before time runs out ⏳`;
+            if (topReward.img && topReward.img.startsWith('http')) {
+                imageUrl = topReward.img;
+            }
+        }
+
+        // Build FCM message
+        const message = {
+            notification: {
+                title: title,
+                body: body,
+            },
+            data: {
+                action: 'open_tournament',
+                tournamentId: tournamentKey || '',
+                image: imageUrl,
+            },
+            android: {
+                priority: 'high',
+                notification: {
+                    channelId: 'tournament_alerts',
+                    icon: 'ic_launcher',
+                    color: '#FFD700',
+                    sound: 'default',
+                    clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+                },
+            },
+        };
+
+        // Add image to notification if available
+        if (imageUrl) {
+            message.notification.imageUrl = imageUrl;
+            message.android.notification.imageUrl = imageUrl;
+        }
+
+        // Send to all tokens (batch of 500 max per FCM)
+        const batchSize = 500;
+        let sent = 0;
+        let failed = 0;
+        const invalidTokens = [];
+
+        for (let i = 0; i < tokens.length; i += batchSize) {
+            const batch = tokens.slice(i, i + batchSize);
+            try {
+                const response = await admin.messaging().sendEachForMulticast({
+                    tokens: batch,
+                    notification: message.notification,
+                    data: message.data,
+                    android: message.android,
+                });
+
+                sent += response.successCount;
+                failed += response.failureCount;
+
+                // Collect invalid tokens for cleanup
+                response.responses.forEach((resp, idx) => {
+                    if (!resp.success && resp.error) {
+                        const code = resp.error.code;
+                        if (code === 'messaging/invalid-registration-token' ||
+                            code === 'messaging/registration-token-not-registered') {
+                            invalidTokens.push(batch[idx]);
+                        }
+                    }
+                });
+            } catch (batchErr) {
+                console.error(`🔔 [FCM] Batch send error:`, batchErr.message);
+                failed += batch.length;
+            }
+        }
+
+        // Cleanup invalid tokens
+        if (invalidTokens.length > 0) {
+            for (const t of invalidTokens) {
+                await redis.srem('fcm:tokens', t);
+                await redis.hdel('fcm:token_users', t);
+            }
+            console.log(`🔔 [FCM] Cleaned ${invalidTokens.length} invalid tokens`);
+        }
+
+        console.log(`🔔 [FCM] Push sent! ✅ ${sent} delivered, ❌ ${failed} failed, 📱 ${tokens.length} total tokens`);
+    } catch (e) {
+        console.error('🔔 [FCM] Push notification error:', e.message);
+    }
+}
 
 // Get physical order status for a specific user_reward (for user My Wins OPEN)
 fastify.get('/api/physical-order-status', async (req, reply) => {
@@ -2312,6 +2496,36 @@ function startTournamentCheck() {
                 ltl: ltl,
                 tid: currentTournamentKey || null
             });
+
+            // --- SEND PUSH NOTIFICATION WHEN TOURNAMENT STARTS ---
+            if (currentPhase === 'p' && previousPhase !== 'p' && currentTournamentKey) {
+                // Tournament just started! Send push notifications
+                let notifRewards = [];
+                try {
+                    const rRaw = await redis.hget(`tournament:info:${currentTournamentKey}`, 'rewards');
+                    if (rRaw) notifRewards = JSON.parse(rRaw);
+                } catch (e) { /* ignore */ }
+                // Supabase fallback
+                if (notifRewards.length === 0 && supabase) {
+                    try {
+                        const sId = await redis.hget(`tournament:info:${currentTournamentKey}`, 'schedule_id');
+                        if (sId) {
+                            const { data: sRewards } = await supabase
+                                .from('tournament_reward_configs')
+                                .select('name, image_url, min_rank, max_rank')
+                                .eq('schedule_id', sId)
+                                .order('sort_order');
+                            if (sRewards && sRewards.length > 0) {
+                                notifRewards = sRewards.map(r => ({ name: r.name, img: r.image_url, min: r.min_rank, max: r.max_rank }));
+                            }
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+                // Fire and forget — don't block the main loop
+                sendTournamentPushNotification(currentTournamentKey, notifRewards).catch(e => {
+                    console.error('🔔 [FCM] Push error (non-blocking):', e.message);
+                });
+            }
 
             // --- ARCHIVE TO SUPABASE WHEN PLAY TIME ENDS ---
             // When phase transitions from 'p' (play) to 'l' (leaderboard),

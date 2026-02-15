@@ -497,6 +497,12 @@
     <!-- AD MANAGER -->
     <script src="ad_manager.js"></script>
 
+    <!-- PUSH NOTIFICATIONS -->
+    <script src="push_init.js"></script>
+
+    <!-- HEARTBEAT (Active User Tracking) -->
+    <script src="heartbeat.js"></script>
+
     <!-- SOCKER.IO -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>
@@ -1260,13 +1266,23 @@
                 const m = String(minutes).padStart(2, '0');
                 const s = String(seconds).padStart(2, '0');
 
+                // Convert 24h time to 12h format (e.g. "18:00" -> "6:00 PM")
+                function to12h(t) {
+                    if (!t) return t;
+                    const [hh, mm] = t.split(':').map(Number);
+                    const ampm = hh >= 12 ? 'PM' : 'AM';
+                    const h12 = hh % 12 || 12;
+                    return `${h12}:${String(mm).padStart(2,'0')} ${ampm}`;
+                }
+
                 let timeInfo = '';
                 if (isDaily) {
                     const scheduledDate = new Date(scheduled.scheduledTime);
                     const isToday = scheduledDate.toDateString() === new Date().toDateString();
-                    timeInfo = isToday ? `Today at ${scheduled.time}` : `Tomorrow at ${scheduled.time}`;
+                    const displayTime = to12h(scheduled.time);
+                    timeInfo = isToday ? `Today at ${displayTime}` : `Tomorrow at ${displayTime}`;
                 } else {
-                    timeInfo = new Date(scheduled.scheduledTime).toLocaleString();
+                    timeInfo = new Date(scheduled.scheduledTime).toLocaleString('en-IN', { hour:'numeric', minute:'2-digit', hour12:true, day:'numeric', month:'short' });
                 }
 
                 // On subsequent renders, just update the timer digits (no flicker)
@@ -2103,6 +2119,7 @@
 
         function closeRewards() {
             document.getElementById('reward-modal').style.display = 'none';
+            AdManager.restoreAds();
         }
 
         // --- MY WINS ---
@@ -2243,6 +2260,7 @@
 
         function closeMyWins() {
             document.getElementById('my-wins-modal').style.display = 'none';
+            AdManager.restoreAds();
         }
 
         // --- CLAIM REWARD (from My Wins list) ---
@@ -2386,6 +2404,7 @@
 
         function closeGameHistory() {
             document.getElementById('game-history-modal').style.display = 'none';
+            AdManager.restoreAds();
         }
 
         // --- COPY REDEEM CODE ---
@@ -2443,6 +2462,7 @@
 
         function closeShippingModal() {
             document.getElementById('shipping-modal').style.display = 'none';
+            AdManager.restoreAds();
         }
 
         async function submitShippingData() {
@@ -2709,6 +2729,7 @@
         function closeWinnerOverlay() {
             document.getElementById('winner-overlay').style.display = 'none';
             winnerOverlayShown = false;
+            AdManager.restoreAds();
         }
 
         // --- CHECK FOR UNCLAIMED REWARDS ON PAGE LOAD ---
@@ -2883,6 +2904,7 @@
 
         function closeTrackingModal() {
             document.getElementById('tracking-modal').style.display = 'none';
+            AdManager.restoreAds();
         }
 
         async function openWhatsAppContact() {
