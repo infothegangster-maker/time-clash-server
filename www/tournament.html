@@ -1034,7 +1034,7 @@
                         <div style="font-family:'Teko',sans-serif; font-size:2.8rem; color:${rankColor}; font-weight:800; line-height:1; margin:2px 0; text-shadow:0 0 15px ${rankColor}44;">${rankOrdinal}</div>
                         <div style="display:flex; justify-content:center; gap:16px; margin-top:4px;">
                             <span style="font-size:0.7rem; color:#94a3b8;">Time: <strong style="color:#fff;">${uTime}s</strong></span>
-                            <span style="font-size:0.7rem; color:#94a3b8;">Diff: <strong style="color:#ef4444;">+${(userRank.score / 10).toFixed(1)}ms</strong></span>
+                            <span style="font-size:0.7rem; color:#94a3b8;">Diff: <strong style="color:#ef4444;">+${userRank.score}ms</strong></span>
                             ${totalPlayers ? `<span style="font-size:0.7rem; color:#94a3b8;">of <strong style="color:#a78bfa;">${totalPlayers}</strong> players</span>` : ''}
                         </div>
                     </div>`;
@@ -1049,7 +1049,7 @@
                     const rank = index + 1;
                     const timeVal = w.actualTime || (targetTime ? targetTime + w.score : w.score);
                     const timeStr = fmtTime(timeVal);
-                    const diffStr = `+${(w.score / 10).toFixed(1)}ms`;
+                    const diffStr = `+${w.score}ms`;
                     let name = w.username || w.userId.substring(0, 8);
                     if (name.length > 11) name = name.substring(0, 9) + '..';
                     const isMe = w.userId === userId;
@@ -1108,7 +1108,7 @@
                             </div>
                             <div style="text-align:right; flex-shrink:0;">
                                 <div style="font-family:'Roboto Mono',monospace; font-size:0.8rem; color:#60a5fa; font-weight:700;">${uTime}s</div>
-                                <div style="font-size:0.65rem; color:#ef4444; font-weight:600;">+${(userRank.score / 10).toFixed(1)}ms</div>
+                                <div style="font-size:0.65rem; color:#ef4444; font-weight:600;">+${userRank.score}ms</div>
                             </div>
                         </div>
                     </div>`;
@@ -1507,7 +1507,7 @@
                 // Robust check for winners array
                 const hasWinner = item.winners && item.winners.length > 0;
                 const winnerName = hasWinner ? (item.winners[0].u.length > 10 ? item.winners[0].u.substring(0, 8) + '...' : item.winners[0].u) : 'No Winner';
-                const score = hasWinner ? ((item.winners[0].s / 10).toFixed(1) + 'ms') : '-';
+                const score = hasWinner ? (item.winners[0].s + 'ms') : '-';
 
                 // Changed to Row layout for Vertical List in History Slide
                 html += `
@@ -2386,7 +2386,7 @@
                                 </div>
                             </div>
                             <div style="text-align:right;">
-                                <div style="color:${diffColor}; font-weight:800; font-size:1.1rem; font-family:'Teko',sans-serif; letter-spacing:1px;">${(diffRaw / 10).toFixed(1)}ms</div>
+                                <div style="color:${diffColor}; font-weight:800; font-size:1.1rem; font-family:'Teko',sans-serif; letter-spacing:1px;">${diffRaw}ms</div>
                                 <div style="color:#64748b; font-size:0.6rem;">best diff</div>
                             </div>
                         </div>

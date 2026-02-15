@@ -1054,7 +1054,7 @@
                     const b = data.b === -1 ? 'NA' : data.b;
 
                     document.getElementById('rank-display').innerText = `RANK: #${r}`;
-                    document.getElementById('best-display').innerText = `BEST: ${b !== 'NA' ? (b / 10).toFixed(1) + 'ms' : 'NA'}`;
+                    document.getElementById('best-display').innerText = `BEST: ${b !== 'NA' ? b + 'ms' : 'NA'}`;
 
                     // START TOURNAMENT TIMER - Only if time left > 0 (not in leaderboard time)
                     if (data.tl && data.tl > 0) {
@@ -1374,7 +1374,7 @@
                 this.elements.displayTimer.innerText = playerTimeStr;
 
                 if (rank) document.getElementById('rank-display').innerText = `RANK: #${rank}`;
-                if (bestScore != null && bestScore >= 0) document.getElementById('best-display').innerText = `BEST: ${(bestScore / 10).toFixed(1)}ms`;
+                if (bestScore != null && bestScore >= 0) document.getElementById('best-display').innerText = `BEST: ${bestScore}ms`;
 
                 if (isWin) {
                     this.elements.displayTimer.style.color = "#22c55e";
@@ -1387,7 +1387,7 @@
                     this.elements.displayTimer.innerHTML = Game.colorizeDigits(targetStr, playerTimeStr);
 
                     this.elements.diffBadge.style.display = "inline-block";
-                    this.elements.diffBadge.innerText = `OFF BY ${(diffMs / 10).toFixed(1)}ms`;
+                    this.elements.diffBadge.innerText = `OFF BY ${diffMs}ms`;
 
                     this.elements.timerBox.style.borderColor = "#ef4444";
                     this.elements.timerBox.classList.add('pulse');
@@ -1402,9 +1402,9 @@
                     if (newRecord) {
                         msg = `🔥 NEW HIGH SCORE! 🔥<br><b>You jumped to Rank #${rank}!</b>`;
                         this.elements.diffBadge.classList.add('new-record-anim');
-                        this.elements.diffBadge.innerText = `NEW BEST: ${(diffMs / 10).toFixed(1)}ms!`;
+                        this.elements.diffBadge.innerText = `NEW BEST: ${diffMs}ms!`;
                     } else if (diffMs < 100) {
-                        msg = `😱 OFF BY A WHISKER!<br><b>Just ${(diffMs / 10).toFixed(1)}ms difference!</b>`;
+                        msg = `😱 OFF BY A WHISKER!<br><b>Just ${diffMs}ms difference!</b>`;
                     } else {
                         msg = `💪 Getting closer!<br><b>Watch the last digit carefully!</b>`;
                     }
@@ -1433,7 +1433,7 @@
                 const medals = ['🥇','🥈','🥉'];
                 listEl.innerHTML = data.scores.map(p => {
                     const medal = medals[p.rank - 1] || `#${p.rank}`;
-                    const scoreStr = (p.score / 10).toFixed(1) + 'ms';
+                    const scoreStr = p.score + 'ms';
                     return `
                         <div class="ts-row ${p.isYou ? 'is-you' : ''}">
                             <div class="ts-rank">${medal}</div>
