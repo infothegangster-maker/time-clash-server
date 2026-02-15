@@ -41,6 +41,26 @@ fastify.get('/', async () => {
     return { status: 'Time Clash Socket Server Online' };
 });
 
+// --- ADMIN AUTH MIDDLEWARE ---
+const ADMIN_SECRET = process.env.ADMIN_SECRET || null;
+if (!ADMIN_SECRET) {
+    console.log("⚠️ WARNING: ADMIN_SECRET not set! Admin endpoints will be BLOCKED. Set ADMIN_SECRET env var.");
+}
+
+fastify.addHook('onRequest', async (req, reply) => {
+    if (req.url.startsWith('/api/admin')) {
+        if (!ADMIN_SECRET) {
+            reply.code(403).send({ error: 'Admin access not configured' });
+            return;
+        }
+        const key = req.headers['x-admin-key'];
+        if (key !== ADMIN_SECRET) {
+            reply.code(401).send({ error: 'Unauthorized' });
+            return;
+        }
+    }
+});
+
 // --- ADMIN ENDPOINTS ---
 // Admin: Get Active Firebase Users (Real-time active users)
 fastify.get('/api/admin/firebase-active-users', async (req, reply) => {
@@ -1088,11 +1108,20 @@ fastify.post('/api/health/tournament-entry', async (req, reply) => {
     }
 });
 
-// POST: Ad reward — +20 health
+// POST: Ad reward — +20 health (rate-limited: max 15 per 10 minutes per user)
 fastify.post('/api/health/ad-reward', async (req, reply) => {
     try {
         const { userId } = req.body;
         if (!userId) return { error: 'userId required' };
+
+        // Rate limit: max 15 ad rewards per 10 minutes
+        const adKey = `health_ad_count:${userId}`;
+        const adCount = parseInt(await redis.get(adKey)) || 0;
+        if (adCount >= 15) {
+            return { error: 'Too many ad rewards. Try again later.', success: false };
+        }
+        await redis.set(adKey, adCount + 1);
+        await redis.expire(adKey, 600); // 10 minutes TTL
 
         await redis.set(`health:${userId}`, HEALTH_MAX);
         await redis.del(`health_regen:${userId}`);
