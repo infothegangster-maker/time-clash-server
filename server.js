@@ -266,6 +266,61 @@ fastify.get('/api/admin/current-tournament', async (req, reply) => {
     }
 });
 
+// Admin: Update Player Score in Live Tournament
+fastify.post('/api/admin/update-score', async (req, reply) => {
+    try {
+        const { tournamentId, userId, newScore } = req.body;
+        if (!tournamentId || !userId || newScore === undefined) {
+            return { error: 'Missing tournamentId, userId, or newScore' };
+        }
+
+        const currentScore = await redis.zscore(tournamentId, userId);
+        await redis.zadd(tournamentId, parseInt(newScore), userId);
+        const newRank = await redis.zrank(tournamentId, userId);
+
+        // Update cached top3
+        try {
+            const top3Raw = await redis.zrange(tournamentId, 0, 2, 'WITHSCORES');
+            if (top3Raw && top3Raw.length > 0) {
+                const newTop3 = [];
+                if (typeof top3Raw[0] === 'object') {
+                    top3Raw.forEach(p => newTop3.push({ user: p.member, score: parseInt(p.score) }));
+                } else {
+                    for (let i = 0; i < top3Raw.length; i += 2) {
+                        newTop3.push({ user: top3Raw[i], score: parseInt(top3Raw[i + 1]) });
+                    }
+                }
+                cachedTop3 = newTop3;
+            }
+        } catch (e) { /* ignore */ }
+
+        return {
+            success: true,
+            userId,
+            oldScore: currentScore !== null ? parseInt(currentScore) : null,
+            newScore: parseInt(newScore),
+            newRank: newRank !== null ? newRank + 1 : null,
+            wasNew: currentScore === null
+        };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// Admin: Remove Player from Live Tournament
+fastify.post('/api/admin/remove-player', async (req, reply) => {
+    try {
+        const { tournamentId, userId } = req.body;
+        if (!tournamentId || !userId) {
+            return { error: 'Missing tournamentId or userId' };
+        }
+        const removed = await redis.zrem(tournamentId, userId);
+        return { success: true, removed: removed > 0 };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
 // Admin: Get Tournament Status (Auto mode, current state)
 fastify.get('/api/admin/tournament-status', async (req, reply) => {
     try {
