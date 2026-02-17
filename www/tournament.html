@@ -2029,7 +2029,6 @@
 
         // --- SHOW REWARDS (PRIZE POOL) ---
         async function showRewards() {
-            AdManager.hideAllAds();
             const modal = document.getElementById('reward-modal');
             const container = document.getElementById('reward-list-container');
             modal.style.display = 'flex';
@@ -2119,12 +2118,10 @@
 
         function closeRewards() {
             document.getElementById('reward-modal').style.display = 'none';
-            AdManager.restoreAds();
         }
 
         // --- MY WINS ---
         async function showMyWins() {
-            AdManager.hideAllAds();
             const modal = document.getElementById('my-wins-modal');
             const container = document.getElementById('my-wins-list');
             modal.style.display = 'flex';
@@ -2210,6 +2207,11 @@
                                 <div style="font-family:monospace; color:#c084fc; font-size:0.9rem; font-weight:700; letter-spacing:1px; overflow:hidden; text-overflow:ellipsis;">${r.redeem_code}</div>
                                 <button onclick="copyCode('${r.redeem_code.replace(/'/g,"\\'")}',this)" style="background:rgba(168,85,247,0.2); border:1px solid rgba(168,85,247,0.3); color:#c084fc; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:0.7rem; font-weight:600; white-space:nowrap;">COPY</button>
                             </div>`;
+                        } else if (rType === 'redeem_code' && !r.redeem_code && r.is_claimed) {
+                            codeHtml = `
+                            <div style="margin-top:8px; padding:8px 12px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:10px; text-align:center;">
+                                <div style="color:#fbbf24; font-size:0.8rem; font-weight:600;">Code pending - contact admin</div>
+                            </div>`;
                         }
 
                         // Physical reward link (show link after claimed too)
@@ -2260,7 +2262,6 @@
 
         function closeMyWins() {
             document.getElementById('my-wins-modal').style.display = 'none';
-            AdManager.restoreAds();
         }
 
         // --- CLAIM REWARD (from My Wins list) ---
@@ -2334,7 +2335,6 @@
 
         // --- GAME HISTORY ---
         async function showGameHistory() {
-            AdManager.hideAllAds();
             const modal = document.getElementById('game-history-modal');
             const container = document.getElementById('game-history-list');
             modal.style.display = 'flex';
@@ -2404,7 +2404,6 @@
 
         function closeGameHistory() {
             document.getElementById('game-history-modal').style.display = 'none';
-            AdManager.restoreAds();
         }
 
         // --- COPY REDEEM CODE ---
@@ -2456,13 +2455,11 @@
                 preview.style.display = 'none';
             }
 
-            AdManager.hideAllAds();
             document.getElementById('shipping-modal').style.display = 'flex';
         }
 
         function closeShippingModal() {
             document.getElementById('shipping-modal').style.display = 'none';
-            AdManager.restoreAds();
         }
 
         async function submitShippingData() {
@@ -2552,6 +2549,7 @@
 
             pendingRewardId = reward.id || null;
             pendingTournamentId = reward.tournament_id || null;
+            pendingRewardType = reward.reward_type || 'default';
             pendingRewardName = reward.reward_name || '';
             pendingRewardImage = reward.reward_image || '';
             const rank = reward.rank_achieved || 1;
@@ -2591,8 +2589,15 @@
                 }
 
                 claimBtn.style.display = 'block';
-                claimText.textContent = 'CLAIM REWARD';
                 claimBtn.disabled = false;
+                // Set claim button text based on reward type
+                if (pendingRewardType === 'physical_reward') {
+                    claimText.textContent = '📦 CLAIM & SHIP';
+                } else if (pendingRewardType === 'redeem_code') {
+                    claimText.textContent = '🔑 CLAIM CODE';
+                } else {
+                    claimText.textContent = 'CLAIM REWARD';
+                }
 
                 // If no rewardId yet, try to fetch it from API
                 if (!pendingRewardId) {
@@ -2610,7 +2615,6 @@
             else if (rank === 3) glowEl.style.background = 'radial-gradient(circle,rgba(205,127,50,0.12) 0%,transparent 70%)';
             else glowEl.style.background = 'radial-gradient(circle,rgba(139,92,246,0.12) 0%,transparent 70%)';
 
-            AdManager.hideAllAds();
             document.getElementById('winner-overlay').style.display = 'flex';
             startConfetti();
         }
@@ -2714,6 +2718,16 @@
                         showClaimToast('Reward Claimed Successfully!');
                         setTimeout(() => closeWinnerOverlay(), 2000);
                     }
+                } else if (data.requiresShipping) {
+                    // Physical reward needs shipping form — redirect
+                    closeWinnerOverlay();
+                    openShippingModal(String(pendingRewardId), pendingRewardName, pendingRewardImage);
+                } else if (data.message === 'Already claimed') {
+                    // Already claimed — just show success and close
+                    claimText.textContent = '✓ ALREADY CLAIMED';
+                    btn.style.background = 'linear-gradient(135deg,#10b981,#059669)';
+                    showClaimToast('Already claimed!');
+                    setTimeout(() => closeWinnerOverlay(), 1500);
                 } else {
                     showClaimToast('Error: ' + (data.error || 'Unknown'), true);
                     btn.disabled = false;
@@ -2729,7 +2743,6 @@
         function closeWinnerOverlay() {
             document.getElementById('winner-overlay').style.display = 'none';
             winnerOverlayShown = false;
-            AdManager.restoreAds();
         }
 
         // --- CHECK FOR UNCLAIMED REWARDS ON PAGE LOAD ---
@@ -2744,11 +2757,15 @@
                 if (data.rewards && data.rewards.length > 0) {
                     const unclaimed = data.rewards.find(r => !r.is_claimed);
                     if (unclaimed) {
+                        // Pass reward_type so claim flow knows to open shipping/code/default
+                        pendingRewardType = unclaimed.reward_type || 'default';
                         showWinnerOverlay({
                             id: unclaimed.id,
+                            tournament_id: unclaimed.tournament_id,
                             rank_achieved: unclaimed.rank_achieved,
                             reward_name: unclaimed.reward_name,
-                            reward_image: unclaimed.reward_image
+                            reward_image: unclaimed.reward_image,
+                            reward_type: unclaimed.reward_type
                         });
                     }
                 }
@@ -2794,7 +2811,6 @@
 
             statusArea.innerHTML = `<div style="display:inline-block; width:30px; height:30px; border:3px solid #475569; border-top-color:#60a5fa; border-radius:50%; animation:spin 0.8s linear infinite;"></div><div style="color:#94a3b8; font-size:1rem; margin-top:10px;">Loading order status...</div>`;
             contactArea.style.display = 'none';
-            AdManager.hideAllAds();
             modal.style.display = 'flex';
 
             try {
@@ -2904,7 +2920,6 @@
 
         function closeTrackingModal() {
             document.getElementById('tracking-modal').style.display = 'none';
-            AdManager.restoreAds();
         }
 
         async function openWhatsAppContact() {

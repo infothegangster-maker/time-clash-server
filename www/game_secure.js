@@ -70,7 +70,7 @@ function connectToServer() {
         startBtn.disabled = false;
         stopBtn.disabled = true;
         isGameRunning = false;
-        timerDisplay.textContent = '00:000';
+        timerDisplay.textContent = '00:0000';
     });
 
     // 2. TIMER STREAM (From Cloud)

@@ -121,24 +121,20 @@ fastify.post('/api/heartbeat', async (req, reply) => {
             const ip = req.headers['x-forwarded-for'] || req.ip;
             const ua = req.headers['user-agent'] || '';
             fbTrack('PageView', { userId, email, ip, ua }, { page: page || 'unknown' });
-        }
 
-        // FB track: App Install (first-time user only - persistent check)
-        const installKey = `app_install_tracked:${userId}`;
-        const isFirstInstall = !(await redis.exists(installKey));
-        if (isFirstInstall && userId) {
-            const ip = req.headers['x-forwarded-for'] || req.ip;
-            const ua = req.headers['user-agent'] || '';
-            // Mark as tracked (persistent, no expiry)
-            await redis.set(installKey, '1');
-            // Track App Install event
-            fbTrack('AppInstall', { userId, email, ip, ua }, {
-                content_name: 'Time Clash App',
-                content_category: 'Game',
-                value: 0,
-                currency: 'USD'
-            });
-            console.log(`📱 [FB] AppInstall tracked for user: ${userId}`);
+            // FB App Install tracking: fires ONCE per user ever (persistent key, no expiry)
+            const installKey = `fb_installed:${userId}`;
+            const alreadyTracked = await redis.exists(installKey);
+            if (!alreadyTracked) {
+                await redis.set(installKey, Date.now().toString());
+                fbTrack('Lead', { userId, email, ip, ua }, {
+                    content_name: 'app_install',
+                    content_category: 'install',
+                    currency: 'INR',
+                    value: 0
+                });
+                console.log(`📲 [FB] App install tracked for user ${userId}`);
+            }
         }
 
         return { success: true };
