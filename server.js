@@ -34,6 +34,46 @@ if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
     console.log("⚠️ Supabase not configured - tournament data will NOT be persisted. Set SUPABASE_URL and SUPABASE_SERVICE_KEY.");
 }
 
+// --- FACEBOOK CONVERSIONS API ---
+const FB_PIXEL_ID = process.env.FB_PIXEL_ID || '883642314508915';
+const FB_ACCESS_TOKEN = process.env.FB_ACCESS_TOKEN || 'EAAMmb7okhPUBQmdnvCYSMKLr35cZBr8kdYL3YZAtiyZC74VA1oGQHKjYml2br3GE5OEFu9skSEtUWo2ORexTdCHvYA0RZATNQNqP79Y9oL0HmH7QiLsA1WEB7QGcZB2dcLHUOiGZAE9EV8bq5yCkxmvvhpFLZBRnDkeweaqhLQu9SSUYpPRZAt0cRwdeioDfUwZDZD';
+const crypto = require('crypto');
+
+async function fbTrack(eventName, userData = {}, customData = {}) {
+    if (!FB_ACCESS_TOKEN || !FB_PIXEL_ID) return;
+    try {
+        const eventData = {
+            event_name: eventName,
+            event_time: Math.floor(Date.now() / 1000),
+            action_source: 'app',
+            user_data: {}
+        };
+        // Hash PII fields per Facebook requirements (SHA256)
+        if (userData.email) eventData.user_data.em = [crypto.createHash('sha256').update(userData.email.toLowerCase().trim()).digest('hex')];
+        if (userData.userId) eventData.user_data.external_id = [crypto.createHash('sha256').update(userData.userId).digest('hex')];
+        if (userData.phone) eventData.user_data.ph = [crypto.createHash('sha256').update(userData.phone.replace(/\D/g, '')).digest('hex')];
+        if (userData.ip) eventData.user_data.client_ip_address = userData.ip;
+        if (userData.ua) eventData.user_data.client_user_agent = userData.ua;
+        if (Object.keys(customData).length > 0) eventData.custom_data = customData;
+
+        const payload = { data: [eventData] };
+        const url = `https://graph.facebook.com/v21.0/${FB_PIXEL_ID}/events?access_token=${FB_ACCESS_TOKEN}`;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.events_received) {
+            console.log(`📊 [FB] ${eventName} tracked (${result.events_received} events)`);
+        } else {
+            console.log(`⚠️ [FB] ${eventName} response:`, JSON.stringify(result));
+        }
+    } catch (e) {
+        console.error(`❌ [FB] Error tracking ${eventName}:`, e.message);
+    }
+}
+
 // --- FASTIFY SETUP ---
 fastify.register(require('@fastify/cors'), { origin: "*" });
 
@@ -69,11 +109,37 @@ fastify.post('/api/heartbeat', async (req, reply) => {
 
         // Store in Redis with 60s TTL — auto-expires if user goes offline
         const key = `heartbeat:${userId}`;
+        const isNew = !(await redis.exists(key));
         await redis.set(key, JSON.stringify({
             userId, username: username || 'Player', email: email || '',
             page: page || 'unknown', lastSeen: Date.now()
         }));
         await redis.expire(key, 60); // 60 second TTL
+
+        // FB track: only on first heartbeat (session start)
+        if (isNew) {
+            const ip = req.headers['x-forwarded-for'] || req.ip;
+            const ua = req.headers['user-agent'] || '';
+            fbTrack('PageView', { userId, email, ip, ua }, { page: page || 'unknown' });
+        }
+
+        // FB track: App Install (first-time user only - persistent check)
+        const installKey = `app_install_tracked:${userId}`;
+        const isFirstInstall = !(await redis.exists(installKey));
+        if (isFirstInstall && userId) {
+            const ip = req.headers['x-forwarded-for'] || req.ip;
+            const ua = req.headers['user-agent'] || '';
+            // Mark as tracked (persistent, no expiry)
+            await redis.set(installKey, '1');
+            // Track App Install event
+            fbTrack('AppInstall', { userId, email, ip, ua }, {
+                content_name: 'Time Clash App',
+                content_category: 'Game',
+                value: 0,
+                currency: 'USD'
+            });
+            console.log(`📱 [FB] AppInstall tracked for user: ${userId}`);
+        }
 
         return { success: true };
     } catch (e) { return { success: false }; }
@@ -3234,8 +3300,8 @@ io.on('connection', (socket) => {
                     // Generate new target for this tournament and store it
                     // Tournament target time: 2 seconds (2000ms) to 3.5 seconds (3500ms)
                     targetTime = Math.floor(Math.random() * 15000) + 20000; // tenths of ms (2.0000s - 3.4999s)
-                    // Store it with tournament duration expiry (use longer expiry for custom tournaments)
-                    const expirySeconds = Math.ceil(TOURNAMENT_DURATION_MS / 1000) + 60; // Add 60s buffer
+                    // Store with generous expiry to survive leaderboard phase + custom tournaments
+                    const expirySeconds = 3600; // 1 hour — ensures target survives entire tournament lifecycle
                     await redis.setex(targetKey1, expirySeconds, targetTime.toString());
                     await redis.setex(targetKey2, expirySeconds, targetTime.toString()); // Store in both formats
                     console.log(`🎯 Generated NEW target for tournament ${currentTournamentId}: ${targetTime} (0.1ms units)`);
@@ -3344,6 +3410,13 @@ io.on('connection', (socket) => {
             ph: phase,
             ltl: lbTimeLeft,
             rw: activeRewards // Send Rewards
+        });
+
+        // Facebook Conversions API: Track tournament join
+        fbTrack('ViewContent', { userId, email: userEmail }, {
+            content_name: mode === 't' ? 'tournament_join' : 'practice_join',
+            content_category: 'game',
+            tournament_id: currentTournamentId || 'practice'
         });
     });
 
@@ -3509,6 +3582,14 @@ io.on('connection', (socket) => {
             tid: currentTournamentId,
             rem: await getTournamentTimeLeft(session.tournamentId || currentTournamentKey),
             ph: await getTournamentPhase(session.tournamentId || currentTournamentKey)
+        });
+
+        // Facebook Conversions API: Track game complete
+        fbTrack('CompleteRegistration', { userId: session.userId, email: session.email }, {
+            content_name: 'game_round_complete',
+            status: win ? 'win' : 'loss',
+            value: diff,
+            currency: 'USD'
         });
     });
 
