@@ -85,8 +85,14 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100%;
+            /* Move the main tournament card higher (avoid center-low feeling) */
+            justify-content: flex-start;
+            /* Take remaining height after the top ad (body is a column flex container) */
+            flex: 1 1 auto;
+            min-height: 0;
+            /* Keep content safely above the fixed bottom ad */
+            padding-top: 10px;
+            padding-bottom: 165px;
         }
 
         /* CARD STYLE */
@@ -340,6 +346,9 @@
 
 <body>
 
+    <!-- TOP AD -->
+    <div id="tournament-ad-top" style="width:100%; height:150px; background:transparent; flex-shrink:0;"></div>
+
     <div id="message-toast">Loading...</div>
 
     <div class="container">
@@ -493,6 +502,9 @@
         </div>
 
     </div>
+
+    <!-- BOTTOM AD -->
+    <div id="tournament-ad-bottom" style="position:fixed; bottom:0; left:0; width:100%; height:150px; background:transparent; z-index:50;"></div>
 
     <!-- AD MANAGER -->
     <script src="ad_manager.js"></script>
@@ -1618,6 +1630,15 @@
         document.addEventListener('deviceready', async () => {
             await AdManager.init();
             TrysManager.init();
+
+            // Show native ads on tournament page
+            const w = window.innerWidth;
+            setTimeout(() => {
+                AdManager.showNativeAd('tournament-ad-top', 'home_top', w, 150);
+            }, 1000);
+            setTimeout(() => {
+                AdManager.showNativeAd('tournament-ad-bottom', 'home_bottom', w, 150);
+            }, 1500);
         });
         // Browser fallback
         TrysManager.init();
